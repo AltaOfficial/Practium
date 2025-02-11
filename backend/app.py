@@ -4,9 +4,8 @@
 # this might also be useful but idk: https://github.com/OthersideAI/chronology
 
 from flask import Flask, jsonify
-import request 
 from openai import OpenAI
-from Pydantic import BaseModel
+from pydantic import BaseModel
 
 
 
