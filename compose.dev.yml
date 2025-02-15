@@ -1,9 +1,8 @@
-version: '1.0.0'
 services:
   frontend:
-    build: 
+    build:
       context: ./frontend
-      dockerfile: Dockerfile
+      dockerfile: dev.Dockerfile
     ports:
       - "3000:3000"
     environment:
@@ -14,13 +13,19 @@ services:
       - ./frontend:/app
       - /app/node_modules
   backend:
-    build: 
+    build:
       context: ./backend
-      dockerfile: Dockerfile
+      dockerfile: dev.Dockerfile
     ports:
       - "8000:8000"
     environment:
       - FLASK_APP=app.py
       - FLASK_RUN_HOST=0.0.0.0
-    volumes:
-      - ./backend:/app
+    develop:
+      watch:
+        - action: sync
+          path: ./backend
+          target: /app
+        - action: rebuild
+          path: requirements.txt
+    restart: always
