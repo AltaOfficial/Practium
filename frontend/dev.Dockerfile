@@ -11,7 +11,4 @@ RUN if [ -f package-lock.json ]; then npm ci; \
 
 COPY . .
 
-CMD \
-    if [ -f package-lock.json ]; then npm run start; \
-    else echo "Lockfile not found" && exit 1; \
-    fi
+CMD ["npm", "run", "dev"]
