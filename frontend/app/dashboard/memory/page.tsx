@@ -1,9 +1,12 @@
 "use client"
 import { getFlashcards } from "./actions"
 import { useEffect, useState } from "react"
+import Flashcard from "@/components/Flashcard"
 
 interface Flashcard {
-  id: number
+  id: Number
+  name: string,
+  totalCards: Number
 }
 
 export default function page() {
@@ -22,7 +25,7 @@ export default function page() {
     <div>
         <div className="text-3xl">Flashcards</div>
         <div>
-            
+          {flashcards.map((flashcard, index) => <Flashcard flashcardName={flashcard.name}/>)}
         </div>
     </div>
   )
