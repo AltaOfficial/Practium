@@ -1,6 +1,7 @@
-flask
+flask[async]
 openai
 python-dotenv
 flask_cors
 supabase
 clerk_backend_api
+asyncio

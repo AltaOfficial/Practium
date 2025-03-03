@@ -1,6 +1,7 @@
 "use client";
 import { generateAssessment } from "./actions";
 import { useParams } from "next/navigation";
+import { MathJax } from "better-react-mathjax";
 
 export default function page() {
   const params = useParams();
@@ -27,6 +28,7 @@ export default function page() {
         value={params.course_id}
         type="text"
       />
+      <MathJax>\(a \ne 0\)</MathJax>
     </form>
   );
 }

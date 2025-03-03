@@ -11,6 +11,8 @@
   "dependencies": {
     "@clerk/nextjs": "^6.11.3",
     "@supabase/supabase-js": "^2.49.1",
+    "@types/mathjax": "^0.0.40",
+    "better-react-mathjax": "^2.1.0",
     "next": "15.1.6",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"

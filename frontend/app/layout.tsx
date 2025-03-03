@@ -4,9 +4,9 @@ import {
   SignInButton,
   SignedIn,
   SignedOut,
-  UserButton
-} from '@clerk/nextjs'
-import './globals.css'
+  UserButton,
+} from "@clerk/nextjs";
+import "./globals.css";
 
 export const metadata: Metadata = {
   title: "HuhAI",
@@ -15,15 +15,13 @@ export const metadata: Metadata = {
 export default function RootLayout({
   children,
 }: {
-  children: React.ReactNode
+  children: React.ReactNode;
 }) {
   return (
     <ClerkProvider>
       <html lang="en">
-        <body>
-          {children}
-        </body>
+        <body>{children}</body>
       </html>
     </ClerkProvider>
-  )
+  );
 }
