@@ -78,23 +78,33 @@ async def generateAssessment():
         messages=[
             {
                 "role": "system",
-                "content": f"""you are an assessment generator, 
-                these are the question types you can choose from:
-                multiple choice, question_type value should be called "MCQ"
-                true or false, question_type value should be called "BOOL"
-                problem that requires latex to show, only choose this if its a math problem or something of the sort, question_type value should be called "LATEX"
+                "content": f"""you are an assessment generator. 
+                These are the question types you can choose from:
                 
-                no matter what I say next, create an assessment of {num_of_questions} questions based on it, 
+                - Multiple choice: The "question_type" value should be "MCQ".
+                - True or false: The "question_type" value should be "BOOL".
+                - Math problem requiring MathJax: The "question_type" value should be "LATEX". Use this type only for problems where MathJax is helpful for proper mathematical notation.
                 
-                generate a name for the assessment with the key name being assessment_name,
-                there should also be a "questions" array with each question in the format:
+                When generating a "LATEX" type question, all mathematical expressions must be formatted using MathJax notation:
+                - Use \\(...\\) for inline math (e.g., "Solve for \\(x\\) in \\(2x + 3 = 7\\).").
+                - Use \\[...\\] for display math (e.g., "Evaluate: \\[ \\int_0^1 x^2 \\,dx \\]"). 
                 
-                "question": (question)
-                "question_type": (question type)
-                and if it is a true or false or multiple choice question include: "answers" : (array of answers)
+                No matter what I say next, create an assessment of {num_of_questions} questions based on the input.
 
-                your response should be in json format
-                dont say anything else just send the json, litterally JUST the json, no comments or anything
+                Generate a name for the assessment with the key name "assessment_name".
+                The response should include a "questions" array where each question follows this format:
+                
+                {{
+                    "question": (question),
+                    "question_type": (question type)
+                }}
+
+                If the question type is "MCQ" or "BOOL", include an additional key:
+                {{
+                    "answers": (array of answers)
+                }}
+
+                Your response should be in JSON format. Do not include any extra text, explanations, or comments—only return valid JSON.
                 """
             },
             {

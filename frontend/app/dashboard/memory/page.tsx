@@ -25,7 +25,7 @@ export default function page() {
     <div>
         <div className="text-3xl">Flashcards</div>
         <div>
-          {flashcards.map((flashcard, index) => <Flashcard flashcardName={flashcard.name}/>)}
+          {flashcards.map((flashcard, index) => <Flashcard flashcardTotal={flashcard.totalCards} flashcardName={flashcard.name}/>)}
         </div>
     </div>
   )
