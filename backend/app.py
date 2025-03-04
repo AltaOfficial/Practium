@@ -66,7 +66,7 @@ def generate_assessment():
     if(request_state.is_signed_in != True):
         return jsonify({"message": "User not logged in"})
     user_id = request_state.payload.get("sub")
-    num_of_questions = 10 # number of questions to produce
+    num_of_questions = request.form.get("textInput", 10) # number of questions to produce
     text_input = request.form.get("textInput", "dont respond") # Get textInput from formData
     # in the future, handle not having the right amount of parameters
 
