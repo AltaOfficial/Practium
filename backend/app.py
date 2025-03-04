@@ -36,9 +36,6 @@ def send_openai_chat(userInput):
     )
     return completion.choices[0].message.content  # Extract the response content
 
-def generateQuiz(formData, request):
-    print("hi")
-
 # future thing with ui, add options for users to type in math equations, like the sqrt of something
 
 @server.route('/user_init_response', methods=['POST'])
@@ -64,7 +61,7 @@ def index():
     return jsonify({ "message": response })  # Return response as JSON
 
 @server.route("/generateassessement", methods=["POST"])
-async def generateAssessment():
+def generate_assessment():
     request_state = clerk_client.authenticate_request(request, AuthenticateRequestOptions(authorized_parties=["http://frontend:3000", "http://localhost:3000"]))
     if(request_state.is_signed_in != True):
         return jsonify({"message": "User not logged in"})
@@ -75,52 +72,53 @@ async def generateAssessment():
 
     completion = chatgpt_client.chat.completions.create(
         model="gpt-4o-mini",
-        messages=[
-            {
-                "role": "system",
-                "content": f"""you are an assessment generator. 
-                These are the question types you can choose from:
-                
-                - Multiple choice: The "question_type" value should be "MCQ".
-                - True or false: The "question_type" value should be "BOOL".
-                - Math problem requiring MathJax: The "question_type" value should be "LATEX". Use this type only for problems where MathJax is helpful for proper mathematical notation.
-                
-                When generating a "LATEX" type question, all mathematical expressions must be formatted using MathJax notation:
-                - Use \\(...\\) for inline math (e.g., "Solve for \\(x\\) in \\(2x + 3 = 7\\).").
-                - Use \\[...\\] for display math (e.g., "Evaluate: \\[ \\int_0^1 x^2 \\,dx \\]"). 
-                
-                No matter what I say next, create an assessment of {num_of_questions} questions based on the input.
+        response_format={ "type": "json_object" },
+        messages=[{
+            "role": "system",
+            "content": f"""You are an assessment generator.
 
-                Generate a name for the assessment with the key name "assessment_name".
-                The response should include a "questions" array where each question follows this format:
-                
-                {{
-                    "question": (question),
-                    "question_type": (question type)
-                }}
+            These are the question types you can choose from:
+            
+            - Multiple choice: The "question_type" value should be "MCQ".
+            - True or false: The "question_type" value should be "BOOL".
+            - Math problem requiring MathJax: The "question_type" value should be "LATEX". Use this type when MathJax improves readability.
+            
+            **MathJax Usage:**  
+            - Apply MathJax **to questions and answers wherever beneficial**, including MCQ and BOOL questions.  
+            - Use \\(...\\) for inline math (e.g., "Solve for \\(x\\) in \\(2x + 3 = 7\\).").  
+            - Use \\[...\\] for display math (e.g., "Evaluate: \\[ \\int_0^1 x^2 \\,dx \\]").  
 
-                If the question type is "MCQ" or "BOOL", include an additional key:
-                {{
-                    "answers": (array of answers)
-                }}
+            **Assessment Requirements:**  
+            - Generate an assessment of {num_of_questions} questions based on the input.  
+            - Use MathJax in **both questions and answers** whenever it improves clarity.  
+            - The response must be a **valid JSON object** with:
+            - `"assessment_name"` (string)  
+            - `"questions"` (array of objects). Each object must have:
+                - `"question"` (string, using MathJax when beneficial)
+                - `"question_type"` (string, either `"MCQ"`, `"BOOL"`, or `"LATEX"`)
+                - If `"question_type"` is `"MCQ"` or `"BOOL"`, it must include `"answers"` (array of strings, using MathJax where beneficial).
 
-                Your response should be in JSON format. Do not include any extra text, explanations, or comments—only return valid JSON.
-                """
-            },
-            {
-                "role": "user",
-                "content": text_input
-            }],
-    )
+            **Response Format:**  
+            - Return a **valid JSON object**.  
+            - Do **not** include any explanations, comments, or extra text—only return the JSON object.
+            """
+        },
+        {
+            "role": "user",
+            "content": text_input
+        }])
 
     completion_text = completion.choices[0].message.content
+
     try:
-        parsed_assessment = json.loads(completion_text)  # Ensure the response is in proper JSON format
-    except json.JSONDecodeError:
+        parsed_assessment = json.loads(completion_text.strip())  # Ensure the response is in proper JSON format
+    except json.JSONDecodeError as exception:
+        print(exception)
         parsed_assessment = {"error": "Invalid JSON response from AI"}
 
     
     print(completion_text)
+    print(parsed_assessment)
     print(parsed_assessment["assessment_name"])
     questions = []
 
@@ -146,8 +144,49 @@ async def generateAssessment():
     return jsonify({"message": {
         "generated_assessement": parsed_assessment,
         "status": "Generation complete!",
-        # "input_data": request
     }})
+
+@server.route("/checkwithai", methods=["POST"])
+async def check_with_ai():
+    user_input = request.get_json()
+    print(user_input)
+    completion = chatgpt_client.chat.completions.create(
+    model="gpt-4o",
+    response_format={"type": "json_object"},
+    messages=[{
+        "role": "system",
+        "content": f"""
+            You are an assessment grader.
+
+            (answer/question might be in mathjax format)
+            This is the question: {user_input["question"]}
+            This is the answer: {user_input["answer"]}
+
+            Provide a numerical response:
+            - 1 if the answer is correct
+            - 0 if the answer is incorrect
+
+            Response format (JSON only):
+            {{
+                "correct": (1 or 0)
+            }}
+
+            Only return valid JSON. Do not include explanations or extra text, no commas NOTHING litterally just the json.
+        """
+        }],
+    )
+
+    completion_text = completion.choices[0].message.content
+    print(completion_text)
+    print(user_input["question"])
+    print(user_input["answer"])
+
+    try:
+        parsed_response = json.loads(completion_text)  # Ensure the response is in proper JSON format
+    except json.JSONDecodeError:
+        parsed_response = {"error": "Invalid JSON response from AI"}
+
+    return jsonify({"correct": parsed_response["correct"]})
 
 if __name__ == "__main__":
     server.run(host="0.0.0.0", port=8000, debug=True)
