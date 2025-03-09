@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { sendCheckWithAI, getAssessment } from "./actions";
 import { useParams } from "next/navigation";
 import { Database } from "@/utils/supabase/database.types";
-import { FiCheck, FiChevronDown, FiX } from "react-icons/fi";
+import { FiCheck, FiX } from "react-icons/fi";
 import { DropdownMenu, RadioGroup, TextArea } from "@radix-ui/themes";
 import { Button } from "@radix-ui/themes";
 import { FaCircleChevronLeft } from "react-icons/fa6";
@@ -19,6 +19,8 @@ export default function page() {
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [currentAnswer, setCurrentAnswer] = useState("");
   const [isCheckingWithAI, setIsCheckingWithAI] = useState(false);
+  const [inChatSession, setInChatSession] = useState(false);
+
   useEffect(() => {
     getAssessment({
       assessmentId: parseInt(params.assessment_id as string),
@@ -27,6 +29,8 @@ export default function page() {
       setQuestions(data);
     });
   }, []);
+
+  function sendChatMessage({ message }: { message: string }) {}
 
   function checkWithAI({
     question,
@@ -151,7 +155,9 @@ export default function page() {
             >
               Check With AI ✨
             </Button>
-            <button className="underline">How do I do this?</button>
+            <button onClick={} className="underline">
+              How do I do this?
+            </button>
           </div>
         </div>
       </div>

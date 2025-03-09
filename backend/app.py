@@ -3,7 +3,7 @@
 # Docs: https://platform.openai.com/docs/guides/structured-outputs
 # Additional resources: https://github.com/OthersideAI/chronology
 
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, Response, sessions
 from openai import OpenAI
 from dotenv import load_dotenv
 from flask_cors import CORS
@@ -63,10 +63,10 @@ def index():
 @server.route("/generateassessement", methods=["POST"])
 def generate_assessment():
     request_state = clerk_client.authenticate_request(request, AuthenticateRequestOptions(authorized_parties=["http://frontend:3000", "http://localhost:3000"]))
-    if(request_state.is_signed_in != True):
+    if request_state.is_signed_in != True:
         return jsonify({"message": "User not logged in"})
     user_id = request_state.payload.get("sub")
-    num_of_questions = request.form.get("textInput", 10) # number of questions to produce
+    num_of_questions = request.form.get("numOfQuestions", 10) # number of questions to produce
     text_input = request.form.get("textInput", "dont respond") # Get textInput from formData
     # in the future, handle not having the right amount of parameters
 
@@ -81,7 +81,7 @@ def generate_assessment():
             
             - Multiple choice: The "question_type" value should be "MCQ".
             - True or false: The "question_type" value should be "BOOL".
-            - Math problem requiring MathJax: The "question_type" value should be "LATEX". Use this type when MathJax improves readability.
+            - word input problem: The "question_type" value should be "LATEX". Prefer these over the other 2
             
             **MathJax Usage:**  
             - Apply MathJax **to questions and answers wherever beneficial**, including MCQ and BOOL questions.  
@@ -116,7 +116,6 @@ def generate_assessment():
         print(exception)
         parsed_assessment = {"error": "Invalid JSON response from AI"}
 
-    
     print(completion_text)
     print(parsed_assessment)
     print(parsed_assessment["assessment_name"])
@@ -125,7 +124,7 @@ def generate_assessment():
     assesment_id = supabase.table("assessments").insert({ "user_id": user_id, "total_questions": num_of_questions, "name": parsed_assessment["assessment_name"], "course_id": request.form.get("courseId", 1) }).execute().data[0]["id"]
     print(assesment_id)
     for question in parsed_assessment["questions"]:
-        if(question["question_type"] == "MCQ"):
+        if question["question_type"] == "MCQ":
             questions.append({
                 "question": question["question"],
                 "question_type": question["question_type"],
@@ -188,5 +187,22 @@ async def check_with_ai():
 
     return jsonify({"correct": parsed_response["correct"]})
 
+@server.route("/explanation")
+def explain_problem():
+    problem = request.args.get("problem")
+
+    def explanation_stream():
+        stream = chatgpt_client.chat.completions.create(
+            model="chatgpt-4o",
+            messages=[{"role": "user", "content": f"how do I solve this problem: {problem}"}],
+            stream=True
+        )
+
+        for chunk in stream:
+            if chunk.choices[0].delta.content is not None:
+                yield chunk.choices[0].delta.content
+
+    return Response(explanation_stream(), mimetype="text/event-stream")
+
 if __name__ == "__main__":
-    server.run(host="0.0.0.0", port=8000, debug=True)
+    server.run(host="0.0.0.0", port=8000, threaded=True, debug=True)

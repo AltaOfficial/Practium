@@ -4,6 +4,7 @@ import { Database } from "@/utils/supabase/database.types";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { getAssesments } from "./actions";
+import AssessementCard from "@/components/AssessmentCard";
 
 type Assessment = Database["public"]["Tables"]["assessments"]["Row"];
 
@@ -25,20 +26,13 @@ export default function page() {
 
   return (
     <div>
-      <p className="text-3xl">Assessments</p>
-      <div className="flex flex-col">
+      <p className="text-4xl mb-3">Assessments</p>
+      <div className="flex flex-row flex-wrap gap-3">
         {assessments &&
           assessments.map((assessment) => (
-            <Link
-              key={assessment.id}
-              href={`/dashboard/practice/courses/${params.course_id}/assessments/${assessment.id}`}
-            >
-              {assessment.name}
-            </Link>
+            <AssessementCard key={assessment.id} assessment={assessment} />
           ))}
-        <Link href={`/dashboard/practice/courses/${params.course_id}/generate`}>
-          + Generate new assessment
-        </Link>
+        <AssessementCard isGenerateCard={true} />
       </div>
     </div>
   );
