@@ -4,6 +4,7 @@ import { Database } from "@/utils/supabase/database.types";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { getAssesments } from "./actions";
+import { FiChevronLeft } from "react-icons/fi";
 import AssessementCard from "@/components/AssessmentCard";
 
 type Assessment = Database["public"]["Tables"]["assessments"]["Row"];
@@ -26,6 +27,11 @@ export default function page() {
 
   return (
     <div>
+      <div>
+        <Link href={"/dashboard/practice"}>
+          <FiChevronLeft />
+        </Link>
+      </div>
       <p className="text-4xl mb-3">Assessments</p>
       <div className="flex flex-row flex-wrap gap-3">
         {assessments &&

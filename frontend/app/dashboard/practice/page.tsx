@@ -17,11 +17,14 @@ export default function page() {
 
   return (
     <div>
-      <p className="text-3xl">Practice</p>
-      {courses &&
-        courses.map((course) => {
-          return <Coursecard key={course.id} course={course} />;
-        })}
+      <p className="text-4xl mb-3">Practice</p>
+      <div className="flex flex-row flex-wrap gap-3">
+        {courses &&
+          courses.map((course) => {
+            return <Coursecard key={course.id} course={course} />;
+          })}
+        <Coursecard isGenerateCard={true} />
+      </div>
     </div>
   );
 }

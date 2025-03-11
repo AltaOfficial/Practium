@@ -193,14 +193,16 @@ def explain_problem():
 
     def explanation_stream():
         stream = chatgpt_client.chat.completions.create(
-            model="chatgpt-4o",
+            model="gpt-4o",
             messages=[{"role": "user", "content": f"how do I solve this problem: {problem}"}],
             stream=True
         )
 
         for chunk in stream:
             if chunk.choices[0].delta.content is not None:
-                yield chunk.choices[0].delta.content
+                yield f"data:{chunk.choices[0].delta.content} \n\n"
+        
+        yield "data: [DONE]\n\n"
 
     return Response(explanation_stream(), mimetype="text/event-stream")
 

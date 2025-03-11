@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { sendCheckWithAI, getAssessment } from "./actions";
 import { useParams } from "next/navigation";
 import { Database } from "@/utils/supabase/database.types";
-import { FiCheck, FiX } from "react-icons/fi";
+import { FiCheck, FiX, FiChevronLeft } from "react-icons/fi";
 import { DropdownMenu, RadioGroup, TextArea } from "@radix-ui/themes";
 import { Button } from "@radix-ui/themes";
 import { FaCircleChevronLeft } from "react-icons/fa6";
@@ -20,6 +20,7 @@ export default function page() {
   const [currentAnswer, setCurrentAnswer] = useState("");
   const [isCheckingWithAI, setIsCheckingWithAI] = useState(false);
   const [inChatSession, setInChatSession] = useState(false);
+  const [currentQuestionChat, setCurrentQuestionChat] = useState("");
 
   useEffect(() => {
     getAssessment({
@@ -28,9 +29,9 @@ export default function page() {
       console.log(data);
       setQuestions(data);
     });
-  }, []);
 
-  function sendChatMessage({ message }: { message: string }) {}
+    return;
+  }, []);
 
   function checkWithAI({
     question,
@@ -142,7 +143,7 @@ export default function page() {
           <div className="flex gap-2">
             <Button
               onClick={() => {
-                if (questions != undefined) {
+                if (questions) {
                   checkWithAI({
                     question: questions[currentQuestion],
                     answer: currentAnswer,
@@ -155,13 +156,35 @@ export default function page() {
             >
               Check With AI ✨
             </Button>
-            <button onClick={} className="underline">
+            <button
+              onClick={() => {
+                if (questions) {
+                  const eventStream = new EventSource(
+                    `http://localhost:8000/explanation?problem=${JSON.stringify(
+                      questions[currentQuestion].question
+                    )}`
+                  );
+                  eventStream.onmessage = (e) => {
+                    if (e.data == "[DONE]") {
+                      eventStream.close();
+                      return;
+                    }
+                    setCurrentQuestionChat((prev) => prev + e.data);
+                  };
+                  eventStream.onerror = (e) => {
+                    console.log(e);
+                    eventStream.close();
+                  };
+                }
+              }}
+              className="underline"
+            >
               How do I do this?
             </button>
           </div>
         </div>
       </div>
-      <ChatWithAI></ChatWithAI>
+      <ChatWithAI currentQuestionChat={currentQuestionChat} />
     </div>
   );
 }

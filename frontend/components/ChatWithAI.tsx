@@ -1,7 +1,12 @@
 import { Button, DropdownMenu, TextField, HoverCard } from "@radix-ui/themes";
 import { useState } from "react";
+import ReactMarkdown from "react-markdown";
 
-export default function ChatWithAI() {
+export default function ChatWithAI({
+  currentQuestionChat,
+}: {
+  currentQuestionChat: string;
+}) {
   const [messageInput, setMessageInput] = useState("");
 
   const sendMessage = () => {
@@ -34,7 +39,9 @@ export default function ChatWithAI() {
             </TextField.Slot>
           </TextField.Root>
         </div>
-        <div>jjjjj</div>
+        <div>
+          <ReactMarkdown children={currentQuestionChat}></ReactMarkdown>
+        </div>
       </div>
     </div>
   );
