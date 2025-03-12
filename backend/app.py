@@ -12,7 +12,7 @@ from client import supabase
 from clerk_backend_api import Clerk
 from clerk_backend_api.jwks_helpers import AuthenticateRequestOptions
 import os
-import asyncio
+import base64
 
 # Load environment variables
 load_dotenv()
@@ -67,13 +67,18 @@ def generate_assessment():
         return jsonify({"message": "User not logged in"})
     user_id = request_state.payload.get("sub")
     num_of_questions = request.form.get("numOfQuestions", 10) # number of questions to produce
-    text_input = request.form.get("textInput", "dont respond") # Get textInput from formData
-    # in the future, handle not having the right amount of parameters
+    form_images = request.files.getlist("uploadedFiles") # images to create a question from
+    print(form_images)
+    text_input = request.form.get("textInput", "") # Get textInput from formData
+    
+    images_base64_encoded = []
+    for image in form_images:
+        if image.filename == "undefined":
+            continue
+        current_image_base64 = base64.b64encode(image.read()).decode("utf-8") # openai api takes in images as base64
+        images_base64_encoded.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{current_image_base64}"}})
 
-    completion = chatgpt_client.chat.completions.create(
-        model="gpt-4o-mini",
-        response_format={ "type": "json_object" },
-        messages=[{
+    input_messages = [{
             "role": "system",
             "content": f"""You are an assessment generator.
 
@@ -89,8 +94,8 @@ def generate_assessment():
             - Use \\[...\\] for display math (e.g., "Evaluate: \\[ \\int_0^1 x^2 \\,dx \\]").  
 
             **Assessment Requirements:**  
-            - Generate an assessment of {num_of_questions} questions based on the input.  
-            - Use MathJax in **both questions and answers** whenever it improves clarity.  
+            - Generate an assessment of {num_of_questions} questions based on the input.
+            - Use MathJax in **both questions and answers** whenever it improves clarity.
             - The response must be a **valid JSON object** with:
             - `"assessment_name"` (string)  
             - `"questions"` (array of objects). Each object must have:
@@ -102,11 +107,29 @@ def generate_assessment():
             - Return a **valid JSON object**.  
             - Do **not** include any explanations, comments, or extra text—only return the JSON object.
             """
-        },
-        {
+        }]
+
+    if(len(images_base64_encoded) > 0 and text_input):
+        input_messages.append({
             "role": "user",
-            "content": text_input
-        }])
+            "content": [{"type": "text", "text": text_input}, *images_base64_encoded]
+        })
+    elif(len(images_base64_encoded) > 0 and not text_input):
+        input_messages.append({
+            "role": "user",
+            "content": [*images_base64_encoded]
+        })
+    elif(text_input and not len(images_base64_encoded) > 0):
+        input_messages.append({
+            "role": "user",
+            "content": [{"type": "text", "text": text_input}]
+        })
+
+    completion = chatgpt_client.chat.completions.create(
+        model="gpt-4o-mini",
+        response_format={ "type": "json_object" },
+        messages=input_messages
+    )
 
     completion_text = completion.choices[0].message.content
 

@@ -10,7 +10,10 @@ export async function generateAssessment(formData: FormData) {
 
   const token = await getToken();
 
-  if (!formData.get("imageInput") && !formData.get("textInput")) {
+  if (
+    (formData.getAll("uploadedFiles")[0] as File).size == 0 &&
+    !formData.get("textInput")
+  ) {
     return;
   } else if (!formData.get("courseId") || !formData.get("numOfQuestions")) {
     return;
