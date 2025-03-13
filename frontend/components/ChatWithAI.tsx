@@ -1,6 +1,9 @@
 import { Button, DropdownMenu, TextField, HoverCard } from "@radix-ui/themes";
 import { useState } from "react";
 import ReactMarkdown from "react-markdown";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import "katex/dist/katex.min.css";
 
 export default function ChatWithAI({
   currentQuestionChat,
@@ -40,7 +43,11 @@ export default function ChatWithAI({
           </TextField.Root>
         </div>
         <div>
-          <ReactMarkdown children={currentQuestionChat}></ReactMarkdown>
+          <ReactMarkdown
+            children={currentQuestionChat}
+            remarkPlugins={[remarkMath]}
+            rehypePlugins={[rehypeKatex]}
+          ></ReactMarkdown>
         </div>
       </div>
     </div>

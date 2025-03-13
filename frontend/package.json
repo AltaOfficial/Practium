@@ -14,11 +14,14 @@
     "@supabase/supabase-js": "^2.49.1",
     "@types/mathjax": "^0.0.40",
     "better-react-mathjax": "^2.1.0",
+    "katex": "^0.16.21",
     "next": "15.1.6",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-icons": "^5.5.0",
-    "react-markdown": "^9.0.3"
+    "react-markdown": "^9.0.3",
+    "rehype-katex": "^7.0.1",
+    "remark-math": "^6.0.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
