@@ -34,7 +34,7 @@ export default function ChatWithAI({
           <p className="text-3xl">ChatGPT</p>
         </div>
       </div>
-      <div className="bg-stone-900 h-screen flex flex-col-reverse rounded-lg items-end p-3">
+      <div className="bg-stone-900 h-screen flex flex-col-reverse rounded-lg items-end p-3 overflow-x-scroll">
         <div className="flex w-full place-self-end">
           <TextField.Root className="w-full self-center flex ">
             <TextField.Slot side="right">

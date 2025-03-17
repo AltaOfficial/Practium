@@ -192,9 +192,15 @@ def explain_problem():
         stream = chatgpt_client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": "use this format(katex) when handling math, chemsistry, etc. $$e^{{i\\theta}} = cos\\theta + isin\\theta$$"},
-                {"role": "user", "content": f"how do I solve this problem: {problem}"}
-                ],
+                {"role": "system", "content": (
+                    "Format your response to include explicit newline characters (`\\n`) in appropriate places.\n"
+                    "Math equations and the like must be formated in latex with dollar signs around it\n"
+                    "Ensure that lists, paragraphs, and code blocks are structured with `\\n` for correct formatting.\n"
+                    "Do not ignore this instruction. Output must include `\\n` explicitly where needed."
+                    "Response should be in markdown utilizing **(word)** where needed "
+                )},
+                {"role": "user", "content": f"How do I solve this problem?\n\n{problem}"}
+            ],
             stream=True
         )
 
