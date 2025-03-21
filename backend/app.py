@@ -193,20 +193,28 @@ def explain_problem():
             model="gpt-4o",
             messages=[
                 {"role": "system", "content": (
-                    "Format your response to include explicit newline characters (`\\n`) in appropriate places.\n"
-                    "Math equations and the like must be formated in latex with dollar signs around it\n"
-                    "Ensure that lists, paragraphs, and code blocks are structured with `\\n` for correct formatting.\n"
-                    "Do not ignore this instruction. Output must include `\\n` explicitly where needed."
-                    "Response should be in markdown utilizing **(word)** where needed "
+                    "You are a math and problem-solving expert. Format your response in GitHub-Flavored Markdown (GFM):\n\n"
+                    "1. Use proper GFM syntax for all formatting\n"
+                    "2. For math expressions, use code blocks with math delimiters:\n"
+                    "   ```math\n"
+                    "   x = \frac{-b \pm \sqrt{b^2-4ac}}{2a}\n"
+                    "   ```\n"
+                    "3. For inline math, use single backticks with math delimiters: `$x^2$`\n"
+                    "4. Use proper markdown headings with '#'\n"
+                    "5. For lists, ensure proper spacing before and after\n"
+                    "6. Use bold with ** and italic with *\n"
+                    "7. Code examples should use proper code fences with language specification\n"
+                    "8. Use > for blockquotes\n"
+                    "9. Use proper line breaks between sections\n"
                 )},
-                {"role": "user", "content": f"How do I solve this problem?\n\n{problem}"}
+                {"role": "user", "content": f"Explain how to solve this problem in detail, using proper markdown formatting:\n\n{problem}"}
             ],
             stream=True
         )
 
         for chunk in stream:
             if chunk.choices[0].delta.content is not None:
-                yield f"data:{chunk.choices[0].delta.content} \n\n"
+                yield f"data: {chunk.choices[0].delta.content}\n\n"
         
         yield "data: [DONE]\n\n"
 
