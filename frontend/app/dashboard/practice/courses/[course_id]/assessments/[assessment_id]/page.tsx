@@ -41,8 +41,12 @@ export default function page() {
       }
       setQuestions(
         questions?.map((questionItem) => {
-          if (questionItem.id === question.id) {
-            return { ...questionItem, is_answered: true, is_correct: data.correct };
+          if (questionItem.id == question.id) {
+            return {
+              ...questionItem,
+              is_answered: true,
+              is_correct: data.correct,
+            };
           }
           return questionItem;
         })
@@ -59,7 +63,7 @@ export default function page() {
     if (!currentQuestionData || !currentAnswer) return;
     checkWithAI({
       question: currentQuestionData,
-      answer: currentAnswer
+      answer: currentAnswer,
     });
   };
 
@@ -69,7 +73,7 @@ export default function page() {
         {/* Left Column - Question Section */}
         <div className="space-y-6">
           <div className="flex items-center space-x-4">
-            <Link 
+            <Link
               href={`/dashboard/practice/courses/${params.course_id}`}
               className="flex items-center text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
             >
@@ -79,7 +83,9 @@ export default function page() {
           </div>
 
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">{assessmentName}</h1>
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">
+              {assessmentName}
+            </h1>
             <p className="mt-2 text-lg text-gray-600 dark:text-gray-400">
               Question {currentQuestion + 1} of {questions?.length || 0}
             </p>
@@ -117,15 +123,23 @@ export default function page() {
 
             <div className="flex space-x-2">
               <Button
-                onClick={() => currentQuestion > 0 && setCurrentQuestion(prev => prev - 1)}
+                onClick={() =>
+                  currentQuestion > 0 && setCurrentQuestion((prev) => prev - 1)
+                }
                 disabled={currentQuestion === 0}
                 variant="outline"
               >
                 Previous
               </Button>
               <Button
-                onClick={() => questions && currentQuestion < questions.length - 1 && setCurrentQuestion(prev => prev + 1)}
-                disabled={!questions || currentQuestion === questions.length - 1}
+                onClick={() =>
+                  questions &&
+                  currentQuestion < questions.length - 1 &&
+                  setCurrentQuestion((prev) => prev + 1)
+                }
+                disabled={
+                  !questions || currentQuestion === questions.length - 1
+                }
                 variant="outline"
               >
                 Next
@@ -135,43 +149,55 @@ export default function page() {
 
           {/* Question Content */}
           {currentQuestionData && (
-            <div className={`bg-white dark:bg-black/40 rounded-lg p-6 border-2 transition-colors
-              ${isCorrect ? "border-green-500" : isAnswered ? "border-red-500" : "border-gray-200 dark:border-gray-700"}
-            `}>
+            <div
+              className={`bg-white dark:bg-black/40 rounded-lg p-6 border-2 transition-colors
+              ${
+                isCorrect
+                  ? "border-green-500"
+                  : isAnswered
+                  ? "border-red-500"
+                  : "border-gray-200 dark:border-gray-700"
+              }
+            `}
+            >
               <MathJax className="text-lg text-gray-900 dark:text-gray-100 mb-6">
                 {currentQuestionData.question}
               </MathJax>
 
               <div className="space-y-4">
                 {currentQuestionData.question_type === "MCQ" && (
-                  <RadioGroup.Root 
+                  <RadioGroup.Root
                     onValueChange={setCurrentAnswer}
                     className="space-y-2"
                   >
                     {currentQuestionData.answers?.map((answer, index) => (
-                      <div key={index} className="flex items-center space-x-3 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-black/60">
-                        <RadioGroup.Item 
-                          value={answer}
-                          className="w-4 h-4"
-                        />
-                        <label className="text-gray-700 dark:text-gray-300">{answer}</label>
+                      <div
+                        key={index}
+                        className="flex items-center space-x-3 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-black/60"
+                      >
+                        <RadioGroup.Item value={answer} className="w-4 h-4" />
+                        <label className="text-gray-700 dark:text-gray-300">
+                          {answer}
+                        </label>
                       </div>
                     ))}
                   </RadioGroup.Root>
                 )}
 
                 {currentQuestionData.question_type === "BOOL" && (
-                  <RadioGroup.Root 
+                  <RadioGroup.Root
                     onValueChange={setCurrentAnswer}
                     className="space-y-2"
                   >
                     {["true", "false"].map((value) => (
-                      <div key={value} className="flex items-center space-x-3 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-black/60">
-                        <RadioGroup.Item 
-                          value={value}
-                          className="w-4 h-4"
-                        />
-                        <label className="text-gray-700 dark:text-gray-300 capitalize">{value}</label>
+                      <div
+                        key={value}
+                        className="flex items-center space-x-3 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-black/60"
+                      >
+                        <RadioGroup.Item value={value} className="w-4 h-4" />
+                        <label className="text-gray-700 dark:text-gray-300 capitalize">
+                          {value}
+                        </label>
                       </div>
                     ))}
                   </RadioGroup.Root>
@@ -201,10 +227,11 @@ export default function page() {
                   onClick={() => {
                     const eventStream = new EventSource(
                       `http://localhost:8000/explanation?problem=${encodeURIComponent(
-                        currentQuestionData.question
+                        currentQuestionData.question || ""
                       )}`
                     );
                     eventStream.onmessage = (e) => {
+                      console.log("woah", e.data);
                       if (e.data === "[DONE]") {
                         eventStream.close();
                         return;
@@ -223,12 +250,16 @@ export default function page() {
               </div>
 
               {isAnswered && (
-                <div className={`mt-4 p-4 rounded-lg ${
-                  isCorrect 
-                    ? "bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300"
-                    : "bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300"
-                }`}>
-                  {isCorrect ? "Correct! Well done!" : "Not quite right. Try again or check the explanation."}
+                <div
+                  className={`mt-4 p-4 rounded-lg ${
+                    isCorrect
+                      ? "bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300"
+                      : "bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300"
+                  }`}
+                >
+                  {isCorrect
+                    ? "Correct! Well done!"
+                    : "Not quite right. Try again or check the explanation."}
                 </div>
               )}
             </div>
@@ -237,7 +268,10 @@ export default function page() {
 
         {/* Right Column - Chat Section */}
         <div className="lg:border-l lg:border-gray-200 lg:dark:border-gray-700 lg:pl-8">
-          <ChatWithAI currentQuestionChat={currentQuestionChat} />
+          <ChatWithAI
+            currentQuestionChat={currentQuestionChat}
+            setCurrentQuestionChat={setCurrentQuestionChat}
+          />
         </div>
       </div>
     </div>

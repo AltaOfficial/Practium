@@ -12,7 +12,10 @@ from client import supabase
 from clerk_backend_api import Clerk
 from clerk_backend_api.jwks_helpers import AuthenticateRequestOptions
 import os
+from io import BytesIO
 import base64
+from pdf2image import convert_from_bytes
+from PIL import Image
 
 # Load environment variables
 load_dotenv()
@@ -49,8 +52,21 @@ def generate_assessment():
     for image in form_images:
         if image.filename == "undefined":
             continue
-        current_image_base64 = base64.b64encode(image.read()).decode("utf-8") # openai api takes in images as base64
-        images_base64_encoded.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{current_image_base64}"}})
+
+        current_image_base64 = ""
+        if image.content_type == "application/pdf":
+            # convert pdf pages into images
+            pdfs_as_imgs = convert_from_bytes(image.read(), fmt="jpeg")
+            for page in pdfs_as_imgs:
+                buffer = BytesIO()
+                page.save(buffer, format="JPEG")
+                current_image_base64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
+                images_base64_encoded.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{current_image_base64}"}})
+
+        else:
+            current_image_base64 = base64.b64encode(image.read()).decode("utf-8") # openai api takes in images as base64
+            images_base64_encoded.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{current_image_base64}"}})
+
 
     input_messages = [{
             "role": "system",
@@ -190,24 +206,27 @@ def explain_problem():
 
     def explanation_stream():
         stream = chatgpt_client.chat.completions.create(
-            model="gpt-4o",
+            model="chatgpt-4o-latest",
             messages=[
                 {"role": "system", "content": (
-                    "You are a math and problem-solving expert. Format your response in GitHub-Flavored Markdown (GFM):\n\n"
-                    "1. Use proper GFM syntax for all formatting\n"
-                    "2. For math expressions, use code blocks with math delimiters:\n"
-                    "   ```math\n"
-                    "   x = \frac{-b \pm \sqrt{b^2-4ac}}{2a}\n"
-                    "   ```\n"
-                    "3. For inline math, use single backticks with math delimiters: `$x^2$`\n"
-                    "4. Use proper markdown headings with '#'\n"
-                    "5. For lists, ensure proper spacing before and after\n"
-                    "6. Use bold with ** and italic with *\n"
-                    "7. Code examples should use proper code fences with language specification\n"
-                    "8. Use > for blockquotes\n"
-                    "9. Use proper line breaks between sections\n"
+                    """You are an AI assistant providing educational explanations. Format your response like this:
+                    - Use HTML formatting for clarity and readability
+                    - Structure your explanation with clear sections
+                    - Start with a brief overview of the problem
+                    - Break down the solution step-by-step
+                    - Include relevant formulas with proper mathematical notation
+                    - Provide examples where helpful
+                    - End with a summary of key concepts
+
+                    use a <br><br> tag at the beginning of your response to separate it from the previous messages
+
+                    use <br> tags unsparingly
+                    Use <b>bold text</b> for important concepts, <i>italics</i> for emphasis, and <code>code blocks</code> for equations or code.
+                    Use <br> for line breaks and <hr> for section dividers.
+                    Make your explanation thorough but accessible to students.
+                    """
                 )},
-                {"role": "user", "content": f"Explain how to solve this problem in detail, using proper markdown formatting:\n\n{problem}"}
+                {"role": "user", "content": f"Explain how to solve this problem in detail:\n\n{problem}"}
             ],
             stream=True
         )
@@ -219,6 +238,45 @@ def explain_problem():
         yield "data: [DONE]\n\n"
 
     return Response(explanation_stream(), mimetype="text/event-stream")
+
+@server.route("/ask")
+def ask_ai():
+    messages_json = request.args.get("messages")
+    
+    if not messages_json:
+        return jsonify({"error": "No messages provided"}), 400
+    
+    try:
+        # Parse the JSON string directly
+        messages = json.loads(messages_json)
+        
+        system_message = {
+            "role": "system",
+            "content": """Your response should be in html format, but dont make it look like an html document, like without the body and html tags, etc
+            use a <br> tag at the beginning of your response to separate it from the previous messages
+
+            Use <b>bold text</b> for important concepts, <i>italics</i> for emphasis, and <code>code blocks</code> for equations or code.
+            Use <br> for line breaks and <hr> for section dividers.
+            """
+        }
+        messages.insert(0, system_message)
+    except Exception as e:
+        return jsonify({"error": f"Invalid messages format: {str(e)}"}), 400
+    
+    def response_stream():
+        stream = chatgpt_client.chat.completions.create(
+            model="chatgpt-4o-latest",
+            messages=messages,
+            stream=True
+        )
+        
+        for chunk in stream:
+            if chunk.choices[0].delta.content is not None:
+                yield f"data: {chunk.choices[0].delta.content}\n\n"
+        
+        yield "data: [DONE]\n\n"
+    
+    return Response(response_stream(), mimetype="text/event-stream")
 
 if __name__ == "__main__":
     server.run(host="0.0.0.0", port=8000, threaded=True, debug=True)

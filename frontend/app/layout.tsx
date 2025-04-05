@@ -10,6 +10,7 @@ import "./globals.css";
 import "@radix-ui/themes/styles.css";
 import MathjaxProvider from "@/contexts/MathjaxContext";
 import { Theme } from "@radix-ui/themes";
+import { ThemeProvider } from "@/contexts/ThemeContext";
 
 export const metadata: Metadata = {
   title: "HuhAI",
@@ -25,9 +26,11 @@ export default function RootLayout({
     <html lang="en">
       <body>
         <ClerkProvider>
-          <MathjaxProvider>
-            <Theme appearance="dark">{children}</Theme>
-          </MathjaxProvider>
+          <ThemeProvider>
+            <MathjaxProvider>
+              <Theme>{children}</Theme>
+            </MathjaxProvider>
+          </ThemeProvider>
         </ClerkProvider>
       </body>
     </html>

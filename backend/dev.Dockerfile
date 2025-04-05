@@ -2,6 +2,8 @@ FROM python:3.12-alpine AS builder
 
 WORKDIR /app
 
+RUN apk add poppler-utils
+
 COPY requirements.txt /app
 RUN if [ -f requirements.txt ]; then pip install -r requirements.txt; \
     else echo "requirements.txt not found" && exit 1; \
