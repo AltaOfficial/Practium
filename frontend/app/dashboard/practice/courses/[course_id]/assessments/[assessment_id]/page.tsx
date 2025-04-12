@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { sendCheckWithAI, getAssessment } from "./actions";
+import { sendCheckWithAI, getQuestions, getAssessment } from "./actions";
 import { useParams } from "next/navigation";
 import { Database } from "@/utils/supabase/database.types";
 import { DropdownMenu, RadioGroup, TextArea, Button } from "@radix-ui/themes";
@@ -23,9 +23,24 @@ export default function page() {
     getAssessment({
       assessmentId: parseInt(params.assessment_id as string),
     }).then(({ data }) => {
+      setAssessmentName(data?.[0].name || "Assessment");
+    });
+
+    getQuestions({
+      assessmentId: parseInt(params.assessment_id as string),
+    }).then(({ data }) => {
       setQuestions(data);
+      if (data && data.length > 0) {
+        setCurrentAnswer(data[currentQuestion]?.given_answer || "");
+      }
     });
   }, []);
+
+  useEffect(() => {
+    if (questions && questions.length > 0) {
+      setCurrentAnswer(questions[currentQuestion]?.given_answer || "");
+    }
+  }, [currentQuestion, questions]);
 
   function checkWithAI({
     question,
@@ -61,6 +76,16 @@ export default function page() {
 
   const handleCheckAnswer = () => {
     if (!currentQuestionData || !currentAnswer) return;
+
+    setQuestions(questions?.map((questionItem) => {
+      if (questionItem.id == currentQuestionData.id) {
+        return {
+          ...questionItem,
+          given_answer: currentAnswer,
+        };
+      }
+      return questionItem;
+    }));
     checkWithAI({
       question: currentQuestionData,
       answer: currentAnswer,
@@ -106,7 +131,7 @@ export default function page() {
                     key={index}
                     onClick={() => {
                       setCurrentQuestion(index);
-                      setCurrentAnswer("");
+                      setCurrentAnswer(questions?.[index].given_answer ? questions?.[index].given_answer : "");
                     }}
                     className="flex items-center justify-between px-4 py-2 hover:bg-gray-100 dark:hover:bg-black/60"
                   >
@@ -123,20 +148,24 @@ export default function page() {
 
             <div className="flex space-x-2">
               <Button
-                onClick={() =>
-                  currentQuestion > 0 && setCurrentQuestion((prev) => prev - 1)
-                }
+                onClick={() => {
+                  if (questions && currentQuestion > 0) {
+                    setCurrentAnswer(questions?.[currentQuestion - 1].given_answer || "");
+                    setCurrentQuestion((prev) => prev - 1);
+                  }
+                }}
                 disabled={currentQuestion === 0}
                 variant="outline"
               >
                 Previous
               </Button>
               <Button
-                onClick={() =>
-                  questions &&
-                  currentQuestion < questions.length - 1 &&
-                  setCurrentQuestion((prev) => prev + 1)
-                }
+                onClick={() => {
+                  if (questions && currentQuestion < questions.length - 1) {
+                    setCurrentAnswer(questions?.[currentQuestion + 1].given_answer || "");
+                    setCurrentQuestion((prev) => prev + 1);
+                  }
+                }}
                 disabled={
                   !questions || currentQuestion === questions.length - 1
                 }
@@ -167,7 +196,19 @@ export default function page() {
               <div className="space-y-4">
                 {currentQuestionData.question_type === "MCQ" && (
                   <RadioGroup.Root
-                    onValueChange={setCurrentAnswer}
+                    value={currentAnswer}
+                    onValueChange={(value) => {
+                      setCurrentAnswer(value);
+                      setQuestions(questions?.map((questionItem) => {
+                        if (questionItem.id == currentQuestionData.id) {
+                          return {
+                            ...questionItem,
+                            given_answer: value,
+                          };
+                        }
+                        return questionItem;
+                      }));
+                    }}
                     className="space-y-2"
                   >
                     {currentQuestionData.answers?.map((answer, index) => (
@@ -186,7 +227,19 @@ export default function page() {
 
                 {currentQuestionData.question_type === "BOOL" && (
                   <RadioGroup.Root
-                    onValueChange={setCurrentAnswer}
+                    value={currentAnswer}
+                    onValueChange={(value) => {
+                      setCurrentAnswer(value);
+                      setQuestions(questions?.map((questionItem) => {
+                        if (questionItem.id == currentQuestionData.id) {
+                          return {
+                            ...questionItem,
+                            given_answer: value,
+                          };
+                        }
+                        return questionItem;
+                      }));
+                    }}
                     className="space-y-2"
                   >
                     {["true", "false"].map((value) => (
@@ -206,7 +259,19 @@ export default function page() {
                 {currentQuestionData.question_type === "LATEX" && (
                   <TextArea
                     value={currentAnswer}
-                    onChange={(e) => setCurrentAnswer(e.target.value)}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setCurrentAnswer(value);
+                      setQuestions(questions?.map((questionItem) => {
+                        if (questionItem.id == currentQuestionData.id) {
+                          return {
+                            ...questionItem,
+                            given_answer: value,
+                          };
+                        }
+                        return questionItem;
+                      }));
+                    }}
                     placeholder="Enter your answer here..."
                     className="w-full min-h-[100px] p-3 rounded-lg border border-gray-200 dark:border-gray-700
                              bg-white dark:bg-black/40 text-gray-900 dark:text-gray-100"
@@ -218,9 +283,9 @@ export default function page() {
                 <Button
                   onClick={handleCheckAnswer}
                   disabled={isCheckingWithAI || !currentAnswer}
-                  className="bg-blue-600 hover:bg-blue-700 text-white"
+                  className={(isCheckingWithAI || !currentAnswer) ? "" : "bg-blue-600 hover:bg-blue-700 text-white"}
                 >
-                  {isCheckingWithAI ? "Checking..." : "Check Answer"} ✨
+                  {isCheckingWithAI ? "Checking..." : "Check With AI"} ✨
                 </Button>
 
                 <button
@@ -259,7 +324,42 @@ export default function page() {
                 >
                   {isCorrect
                     ? "Correct! Well done!"
-                    : "Not quite right. Try again or check the explanation."}
+                    : (
+                      <>
+                        Not quite right. Try again or check the explanation.{" "}
+                        <button
+                          onClick={() => {
+                            if (!currentQuestionData) return;
+                            
+                            // Create EventSource for streaming response
+                            const eventSource = new EventSource(
+                              `http://localhost:8000/explain_wrong_answer?question=${encodeURIComponent(
+                                currentQuestionData.question || ""
+                              )}&answer=${encodeURIComponent(currentAnswer || "")}`
+                            );
+                            
+                            // Handle incoming messages
+                            eventSource.onmessage = (event) => {
+                              if (event.data === "[DONE]") {
+                                eventSource.close();
+                                return;
+                              }
+                              setCurrentQuestionChat((prev) => prev + event.data);
+                            };
+                            
+                            // Handle errors
+                            eventSource.onerror = (error) => {
+                              console.error("EventSource error:", error);
+                              eventSource.close();
+                              setCurrentQuestionChat((prev) => prev + "\n\nError: Could not get explanation. Please try again.");
+                            };
+                          }}
+                          className="text-blue-600 dark:text-blue-400 hover:underline"
+                        >
+                          See why this is wrong
+                        </button>
+                      </>
+                    )}
                 </div>
               )}
             </div>

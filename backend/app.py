@@ -239,6 +239,47 @@ def explain_problem():
 
     return Response(explanation_stream(), mimetype="text/event-stream")
 
+@server.route("/explain_wrong_answer")
+def explain_wrong_answer():
+    question = request.args.get("question")
+    answer = request.args.get("answer")
+
+    def explanation_stream():
+        stream = chatgpt_client.chat.completions.create(
+            model="chatgpt-4o-latest",
+            messages=[
+                {"role": "system", "content": (
+                    """You are an AI assistant providing educational explanations. Your task is to explain why a given answer to a question is incorrect.
+                    
+                    Format your response like this:
+                    - Use HTML formatting for clarity and readability
+                    - Start with a brief explanation of why the answer is wrong
+                    - Explain the correct approach to solve the problem
+                    - Provide the correct answer
+                    - Include relevant formulas with proper mathematical notation
+                    - End with a summary of key concepts
+                    
+                    use a <br><br> tag at the beginning of your response to separate it from the previous messages
+                    
+                    Use <b>bold text</b> for important concepts, <i>italics</i> for emphasis, and <code>code blocks</code> for equations or code.
+                    Use <br> for line breaks and <hr> for section dividers.
+                    Make your explanation thorough but accessible to students.
+                    Be encouraging and helpful in your explanation.
+                    """
+                )},
+                {"role": "user", "content": f"Question: {question}\n\nGiven answer: {answer}\n\nExplain why this answer is incorrect and provide the correct solution."}
+            ],
+            stream=True
+        )
+
+        for chunk in stream:
+            if chunk.choices[0].delta.content is not None:
+                yield f"data: {chunk.choices[0].delta.content}\n\n"
+        
+        yield "data: [DONE]\n\n"
+
+    return Response(explanation_stream(), mimetype="text/event-stream")
+
 @server.route("/ask")
 def ask_ai():
     messages_json = request.args.get("messages")
@@ -252,11 +293,38 @@ def ask_ai():
         
         system_message = {
             "role": "system",
-            "content": """Your response should be in html format, but dont make it look like an html document, like without the body and html tags, etc
-            use a <br> tag at the beginning of your response to separate it from the previous messages
-
-            Use <b>bold text</b> for important concepts, <i>italics</i> for emphasis, and <code>code blocks</code> for equations or code.
-            Use <br> for line breaks and <hr> for section dividers.
+            "content": """
+            markdown format
+            
+            {"p": "/message/content/parts/0", "o": "append", "v": "Sure! Here's a **thermochemistry problem"}	
+            07:42:14.505
+            delta	{"v": "** involving **enthalpy and heat transfer"}	
+            07:42:14.827
+            message	{"type": "title_generation", "title": "Thermochemistry problem and solution", "conversation_id": "67fa5195-7ac8-800a-bc52-33691f8827c4"}	
+            07:42:14.995
+            delta	{"v": "**, followed by a step-by-step solution"}	
+            07:42:15.011
+            delta	{"v": ".\n\n---\n\n### \\ud83d\\udd25 **Problem**"}	
+            07:42:15.210
+            delta	{"v": ":\nA 50.0 g block of iron at 100.0\\u00b0C"}	
+            07:42:15.548
+            delta	{"v": " is placed into 200.0 g of water at 25.0\\u00b0C"}	
+            07:42:15.763
+            delta	{"v": ". Assuming no heat is lost to the"}	
+            07:42:15.995
+            delta	{"v": " surroundings, what will be the final temperature"}	
+            07:42:16.330
+            delta	{"v": " of the system?\n\n**Given**:\n- Specific heat of iron, \\( c"}	
+            07:42:16.560
+            delta	{"v": "_{\\text{Fe}} = 0.450 \\, \\text{J"}	
+            07:42:16.821
+            delta	{"v": "/g\\u00b0C} \\) \\n- Specific heat of water, \\( c_{\\text{H}_2\\text{O}} = 4.18 \\,"}	
+            07:42:17.050
+            delta	{"v": " \\text{J/g\\u00b0C} \\"}	
+            07:42:17.296
+            delta	{"v": ")\n\n---\n\n### \\ud83e\\uddea **Solution"}	
+            07:42:17.572
+            delta	{"v": "**:\n\nLet the final temperature be \\( T_f \\). \nHeat lost by"}	
             """
         }
         messages.insert(0, system_message)
@@ -272,6 +340,7 @@ def ask_ai():
         
         for chunk in stream:
             if chunk.choices[0].delta.content is not None:
+                print(chunk.choices[0].delta.content)
                 yield f"data: {chunk.choices[0].delta.content}\n\n"
         
         yield "data: [DONE]\n\n"

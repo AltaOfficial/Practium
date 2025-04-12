@@ -4,7 +4,7 @@ import { Database } from "@/utils/supabase/database.types";
 
 type Question = Database["public"]["Tables"]["questions"]["Row"];
 
-export async function getAssessment({
+export async function getQuestions({
   assessmentId,
 }: {
   assessmentId: number;
@@ -18,7 +18,25 @@ export async function getAssessment({
   if (questions.data) {
     return { data: questions.data };
   } else {
-    return { error: "Error when fetching assessments" };
+    return { error: "Error when fetching questions" };
+  }
+}
+
+export async function getAssessment({
+  assessmentId,
+}: {
+  assessmentId: number;
+}) {
+  const assessment = await supabase
+    .from("assessments")
+    .select()
+    .eq("id", assessmentId)
+    .order("id", { ascending: true });
+
+  if (assessment.data) {
+    return { data: assessment.data };
+  } else {
+    return { error: "Error when fetching assessment" };
   }
 }
 
@@ -50,7 +68,7 @@ export async function sendCheckWithAI({
 
   await supabase
     .from("questions")
-    .update({ is_answered: true, is_correct: res.correct })
+    .update({ is_answered: true, is_correct: res.correct, given_answer: answer })
     .eq("id", question.id);
 
   console.log(question.id);

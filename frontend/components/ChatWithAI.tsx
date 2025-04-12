@@ -32,7 +32,7 @@ export default function ChatWithAI({
     setCurrentQuestionChat(
       (prev) =>
         prev +
-        `<br><br><p class="text-[#3e63dd]">User: ${messageInput.trim()}</p>`
+        `User: ${messageInput.trim()}\n\n`
     );
 
     // Create messages array from existing chat
@@ -54,7 +54,7 @@ export default function ChatWithAI({
 
     messages.push({
       role: "user",
-      content: `<br><br> ${messageInput.trim()}`,
+      content: `${messageInput.trim()}`,
     });
 
     const eventStream = new EventSource(
@@ -106,9 +106,7 @@ export default function ChatWithAI({
         <div className="flex-1 w-full overflow-y-auto" ref={chatContainerRef}>
           <div className="w-full">
             <MathJax>
-              {/* this makes me upset but i dont dont have the time to fix it */}
-              {/* TODO: find a better way to do this */}
-              <div dangerouslySetInnerHTML={{ __html: currentQuestionChat }} />
+              <p>{currentQuestionChat}</p>
             </MathJax>
           </div>
         </div>
