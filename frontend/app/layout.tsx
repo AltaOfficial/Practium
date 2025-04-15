@@ -11,9 +11,19 @@ import "@radix-ui/themes/styles.css";
 import MathjaxProvider from "@/contexts/MathjaxContext";
 import { Theme } from "@radix-ui/themes";
 import { ThemeProvider } from "@/contexts/ThemeContext";
+import { Poppins } from 'next/font/google';
+
+// Import KaTeX CSS
+import "katex/dist/katex.min.css";
+
+const poppins = Poppins({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700'],
+  variable: '--font-poppins',
+});
 
 export const metadata: Metadata = {
-  title: "HuhAI",
+  title: "Practium",
   description: "Learn More, Study Less",
 };
 
@@ -23,12 +33,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
+    <html lang="en" className={`${poppins.variable}`}>
       <body>
         <ClerkProvider>
           <ThemeProvider>
             <MathjaxProvider>
-              <Theme>{children}</Theme>
+              <Theme accentColor="gray">{children}</Theme>
             </MathjaxProvider>
           </ThemeProvider>
         </ClerkProvider>

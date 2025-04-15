@@ -4,50 +4,74 @@ import { Database } from "@/utils/supabase/database.types";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { getAssesments } from "./actions";
-import AssessementCard from "@/components/AssessmentCard";
+import AssessmentCard from "@/components/AssessmentCard";
+import { FiArrowLeft } from "react-icons/fi";
 
 type Assessment = Database["public"]["Tables"]["assessments"]["Row"];
 
-export default function page() {
-  const params = useParams();
-  const [assessments, setAssessments] = useState<Assessment[]>();
+export default function CourseTestsPage() {
+  const { course_id } = useParams();
+  const [assessments, setAssessments] = useState<Assessment[]>([]);
 
   useEffect(() => {
-    getAssesments(parseInt(params.course_id as string)).then(
-      ({ data, error }) => {
-        if (!data) {
-          console.error(error);
-        } else {
-          setAssessments(data);
-        }
+    getAssesments(parseInt(course_id as string)).then((result) => {
+      if (result.data) {
+        setAssessments(result.data);
+      } else if (result.error) {
+        console.error(result.error);
       }
-    );
-  }, []);
+    });
+  }, [course_id]);
+
+  const handleStart = (id: number) => {
+    // Handle starting the test
+    console.log("Starting test", id);
+  };
+
+  const handleOpenMenu = (id: number) => {
+    // Handle opening the menu
+    console.log("Opening menu for test", id);
+  };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div className="flex items-center space-x-4 mb-8">
-        <Link 
+    <div className="max-w-7xl mx-auto py-12 pb-28">
+      <div className="flex justify-between mb-8">
+        <div>
+          <h1 className="text-4xl font-bold text-default mb-2">Your Tests</h1>
+          <p className="text-[#878787] font-medium">
+            Review and practice your generated assessments
+          </p>
+        </div>
+        <Link
           href="/dashboard/practice"
-          className="flex items-center text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
+          className="flex items-center gap-2 text-[#333333] font-medium hover:opacity-80"
         >
-          <span className="text-2xl">←</span>
-          <span className="ml-2">Back to Courses</span>
+          <FiArrowLeft size={20} />
+          <span>Return to courses</span>
         </Link>
       </div>
 
-      <div className="mb-8">
-        <h1 className="text-4xl font-bold text-gray-900 dark:text-gray-100">Assessments</h1>
-        <p className="mt-2 text-lg text-gray-600 dark:text-gray-400">
-          View your assessments or create a new one
-        </p>
-      </div>
-      
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-        <AssessementCard isGenerateCard={true} />
-        {assessments && assessments.map((assessment) => (
-          <AssessementCard key={assessment.id} assessment={assessment} />
+      <div className="space-y-6">
+        {assessments.map((assessment) => (
+          <AssessmentCard
+            key={assessment.id}
+            title={assessment.name || "Untitled Assessment"}
+            totalQuestions={assessment.total_questions || 0}
+            answeredQuestions={0}
+            lastAccessed={assessment.created_at ? new Date(assessment.created_at).toLocaleDateString() : "Never"}
+            course_id={course_id as string}
+            assessment_id={assessment.id.toString()}
+          />
         ))}
+      </div>
+
+      <div className="fixed bottom-0 left-0 right-0 p-6 flex justify-center">
+        <Link 
+          href={`/dashboard/practice/courses/${course_id}/generate`}
+          className="bg-[#333333] text-white px-6 py-3 rounded-full font-medium transition-transform hover:-translate-y-1"
+        >
+          Generate New Test
+        </Link>
       </div>
     </div>
   );

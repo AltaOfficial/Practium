@@ -4,20 +4,24 @@ import { useParams, useRouter } from "next/navigation";
 import { TextArea, Button } from "@radix-ui/themes";
 import { useState, useRef } from "react";
 import Link from "next/link";
+import { FiArrowLeft } from "react-icons/fi";
 
-export default function page() {
-  const params = useParams();
+export default function GenerateTestPage() {
+  const { course_id } = useParams();
   const router = useRouter();
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const hiddenFilesInput = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleSubmit = async (formData: FormData) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
     setIsGenerating(true);
+    
+    const formData = new FormData(e.currentTarget);
     try {
       await generateAssessment(formData);
-      router.push(`/dashboard/practice/courses/${params.course_id}`);
+      router.push(`/dashboard/practice/courses/${course_id}`);
     } catch (error) {
       console.error(error);
     }
@@ -50,120 +54,95 @@ export default function page() {
   };
 
   return (
-    <div className="min-h-screen">
-      <div className="max-w-4xl mx-auto px-4 py-8">
-        <div className="flex items-center space-x-4 mb-8">
-          <Link 
-            href={`/dashboard/practice/courses/${params.course_id}`}
-            className="flex items-center text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
-          >
-            <span className="text-2xl">←</span>
-            <span className="ml-2">Back to Assessments</span>
-          </Link>
-        </div>
-
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold text-gray-900 dark:text-gray-100">Generate Assessment</h1>
-          <p className="mt-2 text-lg text-gray-600 dark:text-gray-400">
-            Create a new assessment by providing content and customizing options
+    <div className="max-w-7xl mx-auto py-12">
+      <div className="flex justify-between items-center mb-8">
+        <div>
+          <h1 className="text-4xl font-bold text-default mb-2">Generate New Test</h1>
+          <p className="text-[#878787] font-medium">
+            Create a new test by providing additional materials or using existing course content
           </p>
         </div>
+        <Link 
+          href={`/dashboard/practice/courses/${course_id}`}
+          className="flex items-center text-[#333333] font-medium gap-2 hover:opacity-80"
+        >
+          <FiArrowLeft size={20} />
+          <span>Return to tests</span>
+        </Link>
+      </div>
 
-        <form action={handleSubmit} className="space-y-6 bg-white dark:bg-black/40 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
-          {/* Hidden file inputs */}
-          <input type="file" ref={hiddenFilesInput} name="uploadedFiles" hidden readOnly multiple />
-          <input hidden readOnly name="courseId" value={params.course_id} type="text" />
-
-          {/* Main content area */}
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Content
-              </label>
-              <TextArea
-                name="textInput"
-                placeholder="Enter your content here or upload files below..."
-                className="min-h-[200px] w-full p-4 rounded-lg border border-gray-200 dark:border-gray-700 
-                          bg-white dark:bg-black/40 text-gray-900 dark:text-gray-100
-                          focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-transparent"
-              />
-            </div>
-
-            {/* File upload section */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Attachments
-              </label>
-              <div className="space-y-3">
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="w-full h-32 border-2 border-dashed border-gray-200 dark:border-gray-700
-                           rounded-lg flex items-center justify-center hover:border-gray-300 
-                           dark:hover:border-gray-600 transition-colors"
-                >
-                  <div className="text-center">
-                    <span className="block text-gray-600 dark:text-gray-400">Drop files here or click to upload</span>
-                    <span className="text-sm text-gray-500">Supports images and PDFs</span>
-                  </div>
-                </button>
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  onChange={handleFileUpload}
-                  accept="image/*,.pdf"
-                  className="hidden"
-                  multiple
-                />
-
-                {/* File list */}
-                {uploadedFiles.length > 0 && (
-                  <div className="space-y-2">
-                    {uploadedFiles.map((file, index) => (
-                      <div key={index} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-black/60 rounded-lg">
-                        <span className="text-sm text-gray-700 dark:text-gray-300">{file.name}</span>
-                        <button
-                          type="button"
-                          onClick={() => removeFile(file)}
-                          className="text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
-                        >
-                          ×
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Options section */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Number of Questions
-              </label>
-              <input
-                type="number"
-                name="numOfQuestions"
-                defaultValue={10}
-                min={1}
-                max={50}
-                className="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 
-                         bg-white dark:bg-black/40 text-gray-900 dark:text-gray-100
-                         focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-transparent"
-              />
-            </div>
+      <div className="bg-white p-8 rounded-2xl max-w-3xl mx-auto">
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div>
+            <label htmlFor="name" className="block text-default font-medium mb-2">
+              Test Name
+            </label>
+            <input
+              type="text"
+              id="name"
+              name="name"
+              placeholder="Enter test name..."
+              className="w-full px-4 py-1 rounded-md border text-default border-[#333333] focus:outline-none shadow-[3px_3px_0_0px_rgba(51,51,51,1)]"
+              required
+            />
           </div>
 
-          {/* Submit button */}
-          <div className="pt-4">
-            <Button
-              type="submit"
-              disabled={isGenerating}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg
-                       transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          <div>
+            <label className="block text-default font-medium mb-2">
+              Attachments
+            </label>
+            <div 
+              onClick={() => fileInputRef.current?.click()}
+              className="border-2 border-dashed border-gray-300 rounded-md p-8 text-center cursor-pointer hover:border-[#333333] transition-colors"
             >
-              {isGenerating ? "Generating..." : "Generate Assessment"}
-            </Button>
+              <p className="text-gray-600 mb-1">Drop files here or click to upload</p>
+              <p className="text-sm text-gray-500">Supports images and PDFs</p>
+              <input
+                ref={fileInputRef}
+                type="file"
+                name="files"
+                multiple
+                accept="image/*,.pdf"
+                onChange={handleFileUpload}
+                className="hidden"
+              />
+            </div>
+            {uploadedFiles.length > 0 && (
+              <div className="mt-2 space-y-1">
+                {uploadedFiles.map((file, index) => (
+                  <div key={index} className="text-sm text-gray-600">
+                    {file.name}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div>
+            <label htmlFor="questions" className="block text-default font-medium mb-2">
+              Number of Questions
+            </label>
+            <input
+              type="number"
+              id="questions"
+              name="questions"
+              min="1"
+              max="50"
+              defaultValue="10"
+              className="w-full px-4 py-1 rounded-md border text-default border-[#333333] focus:outline-none shadow-[3px_3px_0_0px_rgba(51,51,51,1)]"
+              required
+            />
+          </div>
+
+
+          <div className="flex justify-end">
+            <button
+              type="submit"
+              disabled={isGenerating} 
+              className="bg-[#333333] mt-5 text-white px-4 py-1 rounded-full hover:opacity-90 disabled:opacity-50"
+            >
+            {isGenerating ? "Generating..." : "Generate Test"}
+            </button>
           </div>
         </form>
       </div>
