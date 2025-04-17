@@ -1,6 +1,10 @@
 import { Button, DropdownMenu, TextField, HoverCard } from "@radix-ui/themes";
 import { useState, Dispatch, SetStateAction, useRef, useEffect } from "react";
-import { MathJax } from "better-react-mathjax";
+import ReactMarkdown from "react-markdown";
+import rehypeKatex from "rehype-katex";
+import remarkMath from "remark-math";
+import "katex/dist/katex.min.css";
+import { Components } from "react-markdown";
 
 export default function ChatWithAI({
   currentQuestionChat,
@@ -29,11 +33,7 @@ export default function ChatWithAI({
     if (!messageInput.trim()) return;
 
     // Add user message to the chat immediately
-    setCurrentQuestionChat(
-      (prev) =>
-        prev +
-        `User: ${messageInput.trim()}\n\n`
-    );
+    setCurrentQuestionChat((prev) => prev + `User: ${messageInput.trim()}\n\n`);
 
     // Create messages array from existing chat
     const messages = [];
@@ -89,25 +89,49 @@ export default function ChatWithAI({
           >
             Restart Chat
           </Button>
-          <DropdownMenu.Root>
-            <DropdownMenu.Trigger>
-              <Button disabled>
-                Choose Model (ChatGPT 4o-mini) <DropdownMenu.TriggerIcon />
-              </Button>
-            </DropdownMenu.Trigger>
-          </DropdownMenu.Root>
         </div>
 
         <div>
           <p className="text-3xl">ChatGPT</p>
         </div>
       </div>
-      <div className="bg-stone-900 h-[80vh] flex flex-col rounded-lg items-end p-3 relative">
+      <div className="bg-stone-900 h-[79vh] flex flex-col rounded-lg items-end p-3 relative">
         <div className="flex-1 w-full overflow-y-auto" ref={chatContainerRef}>
           <div className="w-full">
-            <MathJax>
-              <p>{currentQuestionChat}</p>
-            </MathJax>
+            <ReactMarkdown
+              rehypePlugins={[rehypeKatex]}
+              components={{
+                p: ({ children }) => {
+                  const content = typeof children === "string" ? children : "";
+                  if (
+                    content.startsWith("User:") ||
+                    content.startsWith("Assistant:")
+                  ) {
+                    return <div className="mt-4 mb-6">{children}</div>;
+                  }
+                  // Handle horizontal rules within paragraphs
+                  if (content.includes("---")) {
+                    const parts = content.split("---");
+                    return (
+                      <div>
+                        {parts.map((part, index) => (
+                          <div key={index}>
+                            {index > 0 && (
+                              <hr className="my-4 border-t border-gray-700" />
+                            )}
+                            <p>{part}</p>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  }
+                  return <p>{children}</p>;
+                },
+                hr: () => <hr className="my-4 border-t border-gray-700" />,
+              }}
+            >
+              {currentQuestionChat}
+            </ReactMarkdown>
           </div>
         </div>
         <div className="flex w-full place-self-end mt-4">

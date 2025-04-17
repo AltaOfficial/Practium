@@ -1,5 +1,5 @@
 "use client";
-import CourseCard from "@/components/CourseCard";
+import CourseCard from "@/components/Coursecard";
 import { useEffect, useState } from "react";
 import { Database } from "@/utils/supabase/database.types";
 import { getCourses } from "./actions";
@@ -29,8 +29,8 @@ export default function PracticePage() {
             Select a course to save generated tests to
           </p>
         </div>
-        <Link 
-          href="/dashboard" 
+        <Link
+          href="/dashboard"
           className="flex items-center text-default font-medium gap-2 hover:opacity-80"
         >
           <FiArrowLeft size={25} />
@@ -42,16 +42,16 @@ export default function PracticePage() {
         {courses.map((course) => (
           <CourseCard
             key={course.id}
-            courseName={course.name || 'Untitled Course'}
+            courseName={course.name || "Untitled Course"}
             testsGenerated={course.total_tests || 0}
-            lastAccessed={'5 hours ago'}
+            lastAccessed={"5 hours ago"}
             href={`/dashboard/practice/courses/${course.id}`}
           />
         ))}
       </div>
 
       <div className="flex justify-center">
-        <Link 
+        <Link
           href="/dashboard/practice/new"
           className="bg-[#333333] text-white px-6 py-3 rounded-full font-medium hover:opacity-90 transition-opacity"
         >

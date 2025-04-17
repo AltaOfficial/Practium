@@ -17,7 +17,7 @@ export default function GenerateTestPage() {
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsGenerating(true);
-    
+
     const formData = new FormData(e.currentTarget);
     try {
       await generateAssessment(formData);
@@ -32,10 +32,12 @@ export default function GenerateTestPage() {
     if (e.target.files) {
       const newFiles = Array.from(e.target.files);
       setUploadedFiles([...uploadedFiles, ...newFiles]);
-      
+
       if (hiddenFilesInput.current) {
         const dataTransfer = new DataTransfer();
-        [...uploadedFiles, ...newFiles].forEach(file => dataTransfer.items.add(file));
+        [...uploadedFiles, ...newFiles].forEach((file) =>
+          dataTransfer.items.add(file)
+        );
         hiddenFilesInput.current.files = dataTransfer.files;
       }
       e.target.value = "";
@@ -43,12 +45,12 @@ export default function GenerateTestPage() {
   };
 
   const removeFile = (fileToRemove: File) => {
-    const updatedFiles = uploadedFiles.filter(file => file !== fileToRemove);
+    const updatedFiles = uploadedFiles.filter((file) => file !== fileToRemove);
     setUploadedFiles(updatedFiles);
-    
+
     if (hiddenFilesInput.current) {
       const dataTransfer = new DataTransfer();
-      updatedFiles.forEach(file => dataTransfer.items.add(file));
+      updatedFiles.forEach((file) => dataTransfer.items.add(file));
       hiddenFilesInput.current.files = dataTransfer.files;
     }
   };
@@ -57,12 +59,15 @@ export default function GenerateTestPage() {
     <div className="max-w-7xl mx-auto py-12">
       <div className="flex justify-between items-center mb-8">
         <div>
-          <h1 className="text-4xl font-bold text-default mb-2">Generate New Test</h1>
+          <h1 className="text-4xl font-bold text-default mb-2">
+            Generate New Test
+          </h1>
           <p className="text-[#878787] font-medium">
-            Create a new test by providing additional materials or using existing course content
+            Create a new test by providing additional materials or using
+            existing course content
           </p>
         </div>
-        <Link 
+        <Link
           href={`/dashboard/practice/courses/${course_id}`}
           className="flex items-center text-[#333333] font-medium gap-2 hover:opacity-80"
         >
@@ -74,16 +79,26 @@ export default function GenerateTestPage() {
       <div className="bg-white p-8 rounded-2xl max-w-3xl mx-auto">
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
-            <label htmlFor="name" className="block text-default font-medium mb-2">
-              Test Name
+            <label
+              htmlFor="content"
+              className="block text-default font-medium mb-2"
+            >
+              Content
             </label>
-            <input
-              type="text"
-              id="name"
-              name="name"
-              placeholder="Enter test name..."
+            <textarea
+              id="content"
+              name="content"
+              rows={3}
+              placeholder="Enter your content here or upload files below..."
               className="w-full px-4 py-1 rounded-md border text-default border-[#333333] focus:outline-none shadow-[3px_3px_0_0px_rgba(51,51,51,1)]"
               required
+            />
+            <input
+              type="text"
+              name="courseId"
+              value={course_id}
+              hidden
+              readOnly
             />
           </div>
 
@@ -91,16 +106,18 @@ export default function GenerateTestPage() {
             <label className="block text-default font-medium mb-2">
               Attachments
             </label>
-            <div 
+            <div
               onClick={() => fileInputRef.current?.click()}
               className="border-2 border-dashed border-gray-300 rounded-md p-8 text-center cursor-pointer hover:border-[#333333] transition-colors"
             >
-              <p className="text-gray-600 mb-1">Drop files here or click to upload</p>
+              <p className="text-gray-600 mb-1">
+                Drop files here or click to upload
+              </p>
               <p className="text-sm text-gray-500">Supports images and PDFs</p>
               <input
                 ref={fileInputRef}
                 type="file"
-                name="files"
+                name="uploadedFiles"
                 multiple
                 accept="image/*,.pdf"
                 onChange={handleFileUpload}
@@ -119,13 +136,16 @@ export default function GenerateTestPage() {
           </div>
 
           <div>
-            <label htmlFor="questions" className="block text-default font-medium mb-2">
+            <label
+              htmlFor="numOfQuestions"
+              className="block text-default font-medium mb-2"
+            >
               Number of Questions
             </label>
             <input
               type="number"
-              id="questions"
-              name="questions"
+              id="numOfQuestions"
+              name="numOfQuestions"
               min="1"
               max="50"
               defaultValue="10"
@@ -134,14 +154,13 @@ export default function GenerateTestPage() {
             />
           </div>
 
-
           <div className="flex justify-end">
             <button
               type="submit"
-              disabled={isGenerating} 
+              disabled={isGenerating}
               className="bg-[#333333] mt-5 text-white px-4 py-1 rounded-full hover:opacity-90 disabled:opacity-50"
             >
-            {isGenerating ? "Generating..." : "Generate Test"}
+              {isGenerating ? "Generating..." : "Generate Test"}
             </button>
           </div>
         </form>

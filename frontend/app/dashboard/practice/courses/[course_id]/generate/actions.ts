@@ -12,12 +12,14 @@ export async function generateAssessment(formData: FormData) {
 
   if (
     (formData.getAll("uploadedFiles")[0] as File).size == 0 &&
-    !formData.get("textInput")
+    !formData.get("content")
   ) {
     return;
   } else if (!formData.get("courseId") || !formData.get("numOfQuestions")) {
     return;
   }
+
+  console.log(formData);
 
   let response = await fetch(`http://backend:8000/generateassessement`, {
     method: "POST",

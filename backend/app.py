@@ -46,7 +46,7 @@ def generate_assessment():
     num_of_questions = request.form.get("numOfQuestions", 10) # number of questions to produce
     form_images = request.files.getlist("uploadedFiles") # images to create a question from
     print(form_images)
-    text_input = request.form.get("textInput", "") # Get textInput from formData
+    text_input = request.form.get("content", "") # Get textInput from formData
     
     images_base64_encoded = []
     for image in form_images:
@@ -209,21 +209,8 @@ def explain_problem():
             model="chatgpt-4o-latest",
             messages=[
                 {"role": "system", "content": (
-                    """You are an AI assistant providing educational explanations. Format your response like this:
-                    - Use HTML formatting for clarity and readability
-                    - Structure your explanation with clear sections
-                    - Start with a brief overview of the problem
-                    - Break down the solution step-by-step
-                    - Include relevant formulas with proper mathematical notation
-                    - Provide examples where helpful
-                    - End with a summary of key concepts
+                    """You are an AI assistant providing educational explanations.
 
-                    use a <br><br> tag at the beginning of your response to separate it from the previous messages
-
-                    use <br> tags unsparingly
-                    Use <b>bold text</b> for important concepts, <i>italics</i> for emphasis, and <code>code blocks</code> for equations or code.
-                    Use <br> for line breaks and <hr> for section dividers.
-                    Make your explanation thorough but accessible to students.
                     """
                 )},
                 {"role": "user", "content": f"Explain how to solve this problem in detail:\n\n{problem}"}
@@ -295,6 +282,8 @@ def ask_ai():
             "role": "system",
             "content": """
             markdown format
+            see how its like this:
+            use new lines
             
             {"p": "/message/content/parts/0", "o": "append", "v": "Sure! Here's a **thermochemistry problem"}	
             07:42:14.505
