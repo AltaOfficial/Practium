@@ -10,7 +10,7 @@ export default function DashboardLayout({
 }) {
   const pathname = usePathname();
   const params = useParams();
-  console.log(pathname);
+
   return (
     <div className="min-h-screen bg-[#F2F2F2] font-poppins">
       {!pathname.match(

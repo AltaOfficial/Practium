@@ -91,7 +91,6 @@ export default function GenerateTestPage() {
               rows={3}
               placeholder="Enter your content here or upload files below..."
               className="w-full px-4 py-1 rounded-md border text-default border-[#333333] focus:outline-none shadow-[3px_3px_0_0px_rgba(51,51,51,1)]"
-              required
             />
             <input
               type="text"

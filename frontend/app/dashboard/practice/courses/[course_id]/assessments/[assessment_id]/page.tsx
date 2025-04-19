@@ -12,6 +12,7 @@ import {
   FiX,
 } from "react-icons/fi";
 import { FaRedo } from "react-icons/fa";
+import { BsYoutube } from "react-icons/bs";
 import { MathJax } from "better-react-mathjax";
 import ChatWithAI from "@/components/ChatWithAI";
 import Image from "next/image";
@@ -27,7 +28,7 @@ export default function page() {
     "--- ### 🎨 You can style the"
   );
   const [assessmentName, setAssessmentName] = useState("Assessment"); // TODO: Fetch assessment name
-  const [isVideosVisible, setIsVideosVisible] = useState(true);
+  const [isVideosVisible, setIsVideosVisible] = useState(false);
 
   useEffect(() => {
     getAssessment({
@@ -108,15 +109,16 @@ export default function page() {
     <div className="">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 h-full overflow-hidden">
         {/* Left Column - Question Section */}
-        <div className="flex flex-col space-y-6 justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-[#333333]">
-              {assessmentName}
-            </h1>
-            <p className="mt-2 text-lg text-[#878787] ">
-              Question {currentQuestion + 1} of {questions?.length || 0}
-            </p>
-          </div>
+        <div className="flex flex-col space-y-6 flex-1 ">
+          <div className="flex flex-col space-y-6">
+            <div>
+              <h1 className="text-3xl font-bold text-[#333333]">
+                {assessmentName}
+              </h1>
+              <p className="mt-2 text-lg text-[#878787] ">
+                Question {currentQuestion + 1} of {questions?.length || 0}
+              </p>
+            </div>
 
           {/* Question Navigation */}
           <div className="flex items-center space-x-4">
@@ -368,68 +370,76 @@ export default function page() {
               </div>
             </div>
           )}
+          </div>
+          
 
           {/* Youtube video suggestions section */}
-          <div
-            className={`flex flex-col space-y-6 transition-all duration-300 ease-in-out ${
-              isVideosVisible ? "" : "translate-y-[150px]"
-            } overflow-y-clip`}
-          >
+          <div className="flex flex-col space-y-6 h-full">
             <div
-              className="flex items-center space-x-2 text-[#333333] flex-col hover:cursor-pointer"
-              onClick={() => setIsVideosVisible(!isVideosVisible)}
+              className={`flex flex-col space-y-6 transition-all duration-300 ease-in-out mt-auto ${
+                isVideosVisible ? "translate-y-[0.2vh]" : "translate-y-[17vh]"
+              } overflow-y-clip`}
             >
-              <FiChevronDown
-                size={20}
-                className={`transition-transform duration-300 ${
-                  isVideosVisible ? "" : "rotate-180"
-                }`}
-              />
-              <p className="text-sm font-medium">Suggested YouTube videos</p>
-            </div>
-            <div className="flex space-x-4 pb-3 pr-1 max-w-full mt-auto text-black overflow-x-scroll">
-              <div className="h-28 min-w-44 border border-[#333333] rounded-md shadow-[2px_3px_0_0px_rgba(51,51,51,1)]">
-                <Image
-                  src="/images/youtube.png"
-                  alt="Youtube"
-                  width={100}
-                  height={100}
+              <div
+                className="flex items-center space-x-2 text-[#333333] flex-col hover:cursor-pointer"
+                onClick={() => setIsVideosVisible(!isVideosVisible)}
+              >
+                <FiChevronDown
+                  size={20}
+                  className={`transition-transform duration-300 ${
+                    isVideosVisible ? "" : "rotate-180"
+                  }`}
                 />
+                <p className="text-sm font-medium">Suggested YouTube videos</p>
               </div>
-              <div className="h-28 min-w-44 border border-[#333333] rounded-md shadow-[2px_3px_0_0px_rgba(51,51,51,1)]">
-                <Image
-                  src="/images/youtube.png"
-                  alt="Youtube"
-                  width={100}
-                  height={100}
-                />
-              </div>
-              <div className="h-28 min-w-44 border border-[#333333] rounded-md shadow-[2px_3px_0_0px_rgba(51,51,51,1)]">
-                <Image
-                  src="/images/youtube.png"
-                  alt="Youtube"
-                  width={100}
-                  height={100}
-                />
-              </div>
-              <div className="h-28 min-w-44 border border-[#333333] rounded-md shadow-[2px_3px_0_0px_rgba(51,51,51,1)]">
-                <Image
-                  src="/images/youtube.png"
-                  alt="Youtube"
-                  width={100}
-                  height={100}
-                />
-              </div>
-              <div className="h-28 min-w-44 border border-[#333333] rounded-md shadow-[2px_3px_0_0px_rgba(51,51,51,1)]">
-                <Image
-                  src="/images/youtube.png"
-                  alt="Youtube"
-                  width={100}
-                  height={100}
-                />
+              <div className="flex space-x-4 pb-3 pr-1 max-w-full mt-auto text-black overflow-x-scroll">
+                <div className="h-28 min-w-44 border border-[#333333] rounded-md shadow-[2px_3px_0_0px_rgba(51,51,51,1)]">
+                  <Image
+                    className="w-full h-full object-cover rounded-md border border-white"
+                    src="https://i.ytimg.com/vi/xbviQHhU1rA/hq720.jpg?sqp=-oaymwEnCNAFEJQDSFryq4qpAxkIARUAAIhCGAHYAQHiAQoIGBACGAY4AUAB&rs=AOn4CLBScuQmLIFGTtBoTK-SI7o7yqCOYA"
+                    alt="Youtube"
+                    width={100}
+                    height={100}
+                  />
+                </div>
+                <div className="h-28 min-w-44 border border-[#333333] rounded-md shadow-[2px_3px_0_0px_rgba(51,51,51,1)] relative">
+                  <Image
+                    className="w-full h-full object-cover rounded-md border border-white"
+                    src="https://i.ytimg.com/vi/rEqWOrLGBP0/hqdefault.jpg?sqp=-oaymwFBCNACELwBSFryq4qpAzMIARUAAIhCGAHYAQHiAQoIGBACGAY4AUAB8AEB-AH-CYAC0AWKAgwIABABGGUgZShlMA8=&rs=AOn4CLC32Tm_rFPKfrhzhl18DwdXvHbdGQ"
+                    alt="Youtube"
+                    width={112}
+                    height={176}
+                  />
+                  <BsYoutube size={20} color="red" className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10" />
+                </div>
+                <div className="h-28 min-w-44 border border-[#333333] rounded-md shadow-[2px_3px_0_0px_rgba(51,51,51,1)]">
+                  <Image
+                    src="/images/youtube.png"
+                    alt="Youtube"
+                    width={100}
+                    height={100}
+                  />
+                </div>
+                <div className="h-28 min-w-44 border border-[#333333] rounded-md shadow-[2px_3px_0_0px_rgba(51,51,51,1)]">
+                  <Image
+                    src="/images/youtube.png"
+                    alt="Youtube"
+                    width={100}
+                    height={100}
+                  />
+                </div>
+                <div className="h-28 min-w-44 border border-[#333333] rounded-md shadow-[2px_3px_0_0px_rgba(51,51,51,1)]">
+                  <Image
+                    src="/images/youtube.png"
+                    alt="Youtube"
+                    width={100}
+                    height={100}
+                  />
+                </div>
               </div>
             </div>
           </div>
+
         </div>
 
         {/* Right Column - Chat Section */}

@@ -7,6 +7,11 @@ const nextConfig: NextConfig = {
       bodySizeLimit: "10mb",
     },
   },
+  images: {
+    remotePatterns: [
+      { hostname: "i.ytimg.com" },
+    ],
+  },
 };
 
 export default nextConfig;

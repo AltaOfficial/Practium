@@ -80,22 +80,18 @@ export default function ChatWithAI({
   };
 
   return (
-    <div className="p-3 bg-stone-800 rounded-lg flex flex-col gap-5">
+    <div className="p-3 bg-white rounded-lg flex flex-col gap-5">
       <div className="h-8 flex flex-row-reverse justify-between place-items-center">
         <div className="flex flex-row-reverse gap-4">
-          <Button
+          <button
             onClick={() => setCurrentQuestionChat("")}
-            className="hover:cursor-pointer"
-          >
+            className="!bg-transparent flex items-center outline-none px-3 py-1.5 !border-2 !border-[#333333] text-[#333333] text-sm rounded-[4px] font-medium"
+            >
             Restart Chat
-          </Button>
-        </div>
-
-        <div>
-          <p className="text-3xl">ChatGPT</p>
+          </button>
         </div>
       </div>
-      <div className="bg-stone-900 h-[79vh] flex flex-col rounded-lg items-end p-3 relative">
+      <div className="bg-white h-[79vh] text-black flex flex-col rounded-lg items-end p-3 relative">
         <div className="flex-1 w-full overflow-y-auto" ref={chatContainerRef}>
           <div className="w-full">
             <ReactMarkdown
@@ -144,10 +140,10 @@ export default function ChatWithAI({
             value={messageInput}
             onChange={(e) => setMessageInput(e.target.value)}
             size={"3"}
-            className="w-full self-center flex"
+            className="w-full self-center flex border !text-[#333333] !outline-none !bg-transparent !font-medium border-[#333333] !rounded-[4px] !shadow-[1.5px_3px_0_0px_rgba(51,51,51,1)]"
           >
-            <TextField.Slot side="right">
-              <Button onClick={sendMessage}>Send</Button>
+            <TextField.Slot className="!bg-transparent !text-[#333333] !font-medium" side="right">
+              <Button className="!bg-[#333333] !text-white" onClick={sendMessage}>Send</Button>
             </TextField.Slot>
           </TextField.Root>
         </div>
