@@ -2,9 +2,11 @@ import { Button, DropdownMenu, TextField, HoverCard } from "@radix-ui/themes";
 import { useState, Dispatch, SetStateAction, useRef, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeKatex from "rehype-katex";
-import remarkMath from "remark-math";
+import RemarkMathPlugin from "remark-math";
 import "katex/dist/katex.min.css";
 import { Components } from "react-markdown";
+import Latex from "react-latex-next";
+import MathJax from "react-mathjax";
 
 export default function ChatWithAI({
   currentQuestionChat,

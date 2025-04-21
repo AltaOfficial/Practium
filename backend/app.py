@@ -213,7 +213,9 @@ def explain_problem():
 
                     """
                 )},
-                {"role": "user", "content": f"Explain how to solve this problem in detail:\n\n{problem}"}
+                {"role": "user", "content": f"""Explain how to solve this problem in detail:\n\n{problem}
+                    use \n for line breaks
+                """}
             ],
             stream=True
         )

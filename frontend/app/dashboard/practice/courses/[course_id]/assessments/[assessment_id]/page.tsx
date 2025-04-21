@@ -25,7 +25,7 @@ export default function page() {
   const [currentAnswer, setCurrentAnswer] = useState("");
   const [isCheckingWithAI, setIsCheckingWithAI] = useState(false);
   const [currentQuestionChat, setCurrentQuestionChat] = useState(
-    "--- ### 🎨 You can style the"
+    "### Step 3"
   );
   const [assessmentName, setAssessmentName] = useState("Assessment"); // TODO: Fetch assessment name
   const [isVideosVisible, setIsVideosVisible] = useState(false);
@@ -329,7 +329,11 @@ export default function page() {
                           eventStream.close();
                           return;
                         }
-                        setCurrentQuestionChat((prev) => prev + e.data);
+                        if(e.data === "  "){
+                          setCurrentQuestionChat((prev) => prev + "\n\n");
+                        }else {
+                          setCurrentQuestionChat((prev) => prev + e.data);
+                        }
                       };
                       eventStream.onerror = (e) => {
                         console.error(e);
