@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { sendCheckWithAI, getQuestions, getAssessment } from "./actions";
 import { useParams } from "next/navigation";
 import { Database } from "@/utils/supabase/database.types";
@@ -16,7 +16,23 @@ import { BsYoutube } from "react-icons/bs";
 import { MathJax } from "better-react-mathjax";
 import ChatWithAI from "@/components/ChatWithAI";
 import Image from "next/image";
+import { ReactSketchCanvas, ReactSketchCanvasRef } from "react-sketch-canvas";
+
 type Question = Database["public"]["Tables"]["questions"]["Row"];
+
+interface Point {
+  x: number;
+  y: number;
+}
+
+interface CanvasPath {
+  paths: Point[];
+  strokeWidth: number;
+  strokeColor: string;
+  drawMode: boolean;
+  startTimestamp?: number;
+  endTimestamp?: number;
+}
 
 export default function page() {
   const params = useParams();
@@ -29,6 +45,7 @@ export default function page() {
   );
   const [assessmentName, setAssessmentName] = useState("Assessment"); // TODO: Fetch assessment name
   const [isVideosVisible, setIsVideosVisible] = useState(false);
+  const canvasRef = useRef<ReactSketchCanvasRef>(null);
 
   useEffect(() => {
     getAssessment({
@@ -48,8 +65,12 @@ export default function page() {
   }, []);
 
   useEffect(() => {
+    // if the user has answered the question in the past, set the current answer for that question to the previous answer upon loading the assesment again
     if (questions && questions.length > 0) {
       setCurrentAnswer(questions[currentQuestion]?.given_answer || "");
+      if(questions[currentQuestion]?.question_type === "DRAWING" && questions[currentQuestion].given_answer){
+        //canvasRef.current?.loadPaths(JSON.parse(questions[currentQuestion].given_answer));
+      }
     }
   }, [currentQuestion, questions]);
 
@@ -106,7 +127,7 @@ export default function page() {
   };
 
   return (
-    <div className="">
+    <div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 h-full overflow-hidden">
         {/* Left Column - Question Section */}
         <div className="flex flex-col space-y-6 flex-1 ">
@@ -137,11 +158,6 @@ export default function page() {
                         key={index}
                         onClick={() => {
                           setCurrentQuestion(index);
-                          setCurrentAnswer(
-                            questions?.[index].given_answer
-                              ? questions?.[index].given_answer
-                              : ""
-                          );
                         }}
                         className="flex items-center justify-between px-4 py-2 hover:bg-[#333333]"
                       >
@@ -239,6 +255,29 @@ export default function page() {
                       </div>
                     ))}
                   </RadioGroup.Root>
+                )}
+
+                {currentQuestionData.question_type === "DRAWING" && (
+                  <ReactSketchCanvas
+                  ref={canvasRef}
+                  onChange={(value) => {
+                    setQuestions(
+                      questions?.map((questionItem) => {
+                        if (questionItem.id == currentQuestionData.id) {
+                          return {
+                            ...questionItem,
+                            given_answer: JSON.stringify(value),
+                          };
+                        }
+                        return questionItem;
+                      })
+                    );
+                  }}
+                  width="100%"
+                  height="30vh"
+                  className="!border !border-[#333333] !rounded-lg shadow-[2px_3px_0_0px_rgba(51,51,51,1)] hover:cursor-crosshair"
+                  svgStyle={{borderRadius: "10px"}}
+                  />  
                 )}
 
                 {currentQuestionData.question_type === "BOOL" && (

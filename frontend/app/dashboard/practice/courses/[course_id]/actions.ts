@@ -9,7 +9,8 @@ export async function getAssesments(courseId: number) {
   let assesments = await supabase
     .from("assessments")
     .select()
-    .eq("course_id", courseId);
+    .eq("course_id", courseId)
+    .order("created_at", { ascending: false });
 
   if (assesments.data) {
     return { data: assesments.data };

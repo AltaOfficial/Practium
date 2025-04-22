@@ -77,6 +77,7 @@ def generate_assessment():
             - Multiple choice: The "question_type" value should be "MCQ".
             - True or false: The "question_type" value should be "BOOL".
             - word input problem: The "question_type" value should be "LATEX". Prefer these over the other 2
+            - drawing problem: The "question_type" value should be "DRAWING".
             
             **MathJax Usage:**  
             - Apply MathJax **to questions and answers wherever beneficial**, including MCQ and BOOL questions.  

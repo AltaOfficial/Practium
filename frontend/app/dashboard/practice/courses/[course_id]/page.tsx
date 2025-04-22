@@ -23,16 +23,6 @@ export default function CourseTestsPage() {
     });
   }, [course_id]);
 
-  const handleStart = (id: number) => {
-    // Handle starting the test
-    console.log("Starting test", id);
-  };
-
-  const handleOpenMenu = (id: number) => {
-    // Handle opening the menu
-    console.log("Opening menu for test", id);
-  };
-
   return (
     <div className="max-w-7xl mx-auto py-12 pb-28">
       <div className="flex justify-between mb-8">
