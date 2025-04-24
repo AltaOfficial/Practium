@@ -4,11 +4,7 @@ import { Database } from "@/utils/supabase/database.types";
 
 type Question = Database["public"]["Tables"]["questions"]["Row"];
 
-export async function getQuestions({
-  assessmentId,
-}: {
-  assessmentId: number;
-}) {
+export async function getQuestions({ assessmentId }: { assessmentId: number }) {
   const questions = await supabase
     .from("questions")
     .select()
@@ -50,15 +46,38 @@ export async function sendCheckWithAI({
   if (!question || !answer) {
     return { error: "Missing question or answer" };
   }
-  let res = await (
-    await fetch("http://backend:8000/checkwithai", {
+
+  let res;
+  if (question.question_type === "DRAWING") {
+    const formData = new FormData();
+    formData.append("question", JSON.stringify(question));
+    formData.append("answer", answer);
+
+    const response = await fetch("http://backend:8000/checkwithai", {
+      method: "POST",
+      body: formData,
+    });
+
+    if (!response.ok) {
+      return { error: "Failed to check answer with AI" };
+    }
+
+    res = await response.json();
+  } else {
+    const response = await fetch("http://backend:8000/checkwithai", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ question: question, answer: answer }),
-    })
-  ).json();
+    });
+
+    if (!response.ok) {
+      return { error: "Failed to check answer with AI" };
+    }
+
+    res = await response.json();
+  }
 
   if (res.correct == undefined || res.correct == null) {
     return {
@@ -68,7 +87,11 @@ export async function sendCheckWithAI({
 
   await supabase
     .from("questions")
-    .update({ is_answered: true, is_correct: res.correct, given_answer: answer })
+    .update({
+      is_answered: true,
+      is_correct: res.correct,
+      given_answer: answer,
+    })
     .eq("id", question.id);
 
   console.log(question.id);

@@ -161,38 +161,74 @@ def generate_assessment():
 
 @server.route("/checkwithai", methods=["POST"])
 async def check_with_ai():
-    user_input = request.get_json()
-    print(user_input)
-    completion = chatgpt_client.chat.completions.create(
-    model="gpt-4o",
-    response_format={"type": "json_object"},
-    messages=[{
-        "role": "system",
-        "content": f"""
-            You are an assessment grader.
+    # check if content type is form data then assume its a drawing question
+    if request.form:
+        question = request.form.get("question")
+        drawing_image = request.form.get("answer")
+        # image is already base64 encoded, so we can just use it
+        print(drawing_image)
+        completion = chatgpt_client.chat.completions.create(
+        model="gpt-4o",
+        response_format={"type": "json_object"},
+        messages=[{
+            "role": "system",
+            "content": f"""
+                You are an assessment grader.
 
-            (answer/question might be in mathjax format)
-            This is the question: {user_input["question"]}
-            This is the answer: {user_input["answer"]}
+                (answer/question might be in mathjax format)
+                This is the question: {question}
+                The answer is the next message
 
-            Provide a numerical response:
-            - 1 if the answer is correct
-            - 0 if the answer is incorrect
+                Provide a numerical response:
+                - 1 if the answer is correct
+                - 0 if the answer is incorrect
 
-            Response format (JSON only):
-            {{
-                "correct": (1 or 0)
-            }}
+                Response format (JSON only):
+                {{
+                    "correct": (1 or 0)
+                }}
 
-            Only return valid JSON. Do not include explanations or extra text, no commas NOTHING litterally just the json.
-        """
-        }],
-    )
+                Only return valid JSON. Do not include explanations or extra text, no commas NOTHING litterally just the json.
+            """
+            },
+            {
+                "role": "user",
+                "content": [{"type": "image_url", "image_url": {"url": drawing_image}}]
+            }],
+        )
+    else:
+        user_input = request.get_json()
+        print(user_input)
+        completion = chatgpt_client.chat.completions.create(
+        model="gpt-4o",
+        response_format={"type": "json_object"},
+        messages=[{
+            "role": "system",
+            "content": f"""
+                You are an assessment grader.
+
+                (answer/question might be in mathjax format)
+                This is the question: {user_input["question"]}
+                This is the answer: {user_input["answer"]}
+
+                Provide a numerical response:
+                - 1 if the answer is correct
+                - 0 if the answer is incorrect
+
+                Response format (JSON only):
+                {{
+                    "correct": (1 or 0)
+                }}
+
+                Only return valid JSON. Do not include explanations or extra text, no commas NOTHING litterally just the json.
+            """
+            }],
+        )
+        print(user_input["question"])
+        print(user_input["answer"])
 
     completion_text = completion.choices[0].message.content
     print(completion_text)
-    print(user_input["question"])
-    print(user_input["answer"])
 
     try:
         parsed_response = json.loads(completion_text)  # Ensure the response is in proper JSON format
