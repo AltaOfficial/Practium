@@ -89,10 +89,11 @@ export default function page() {
     answer: string;
   }) {
     setIsCheckingWithAI(true);
-    sendCheckWithAI({ question, answer }).then((data) => {
-      if (data.error) {
-        return console.error(data.error);
-      }
+    sendCheckWithAI({ question, answer, canvasPath: currentAnswer }).then(
+      (data) => {
+        if (data.error) {
+          return console.error(data.error);
+        }
       setQuestions(
         questions?.map((questionItem) => {
           if (questionItem.id == question.id) {

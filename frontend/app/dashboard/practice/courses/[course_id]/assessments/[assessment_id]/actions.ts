@@ -39,9 +39,11 @@ export async function getAssessment({
 export async function sendCheckWithAI({
   question,
   answer,
+  canvasPath,
 }: {
   question: Question;
-  answer: string | undefined | null;
+  answer: string;
+  canvasPath?: string;
 }) {
   if (!question || !answer) {
     return { error: "Missing question or answer" };
@@ -90,7 +92,7 @@ export async function sendCheckWithAI({
     .update({
       is_answered: true,
       is_correct: res.correct,
-      given_answer: answer,
+      given_answer: question.question_type === "DRAWING" ? canvasPath : answer,
     })
     .eq("id", question.id);
 

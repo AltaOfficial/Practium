@@ -163,20 +163,21 @@ def generate_assessment():
 async def check_with_ai():
     # check if content type is form data then assume its a drawing question
     if request.form:
-        question = request.form.get("question")
+        question = json.loads(request.form.get("question"))
         drawing_image = request.form.get("answer")
         # image is already base64 encoded, so we can just use it
-        print(drawing_image)
+        print(question)
+        print(question["question"])
         completion = chatgpt_client.chat.completions.create(
-        model="gpt-4o",
+        model="gpt-4.1",
         response_format={"type": "json_object"},
         messages=[{
             "role": "system",
             "content": f"""
-                You are an assessment grader.
+                You are an assessment grader. make sure answer is as accurate as possible.
 
                 (answer/question might be in mathjax format)
-                This is the question: {question}
+                This is the question: {question["question"]}
                 The answer is the next message
 
                 Provide a numerical response:
