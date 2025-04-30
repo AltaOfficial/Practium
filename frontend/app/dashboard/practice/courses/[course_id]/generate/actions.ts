@@ -14,8 +14,10 @@ export async function generateAssessment(formData: FormData) {
     (formData.getAll("uploadedFiles")[0] as File).size == 0 &&
     !formData.get("content")
   ) {
+    console.log("No content or files uploaded");
     return;
   } else if (!formData.get("courseId") || !formData.get("numOfQuestions")) {
+    console.log("No courseId or numOfQuestions");
     return;
   }
 

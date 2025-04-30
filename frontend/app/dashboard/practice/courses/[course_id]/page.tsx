@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { Database } from "@/utils/supabase/database.types";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { getAssesments } from "./actions";
+import { getAssesments, deleteAssessment } from "./actions";
 import AssessmentCard from "@/components/AssessmentCard";
 import { FiArrowLeft } from "react-icons/fi";
 
@@ -51,6 +51,16 @@ export default function CourseTestsPage() {
             lastAccessed={assessment.created_at ? new Date(assessment.created_at).toLocaleDateString() : "Never"}
             course_id={course_id as string}
             assessment_id={assessment.id.toString()}
+            deleteAssessment={() => {
+              deleteAssessment(assessment.id.toString()).then((result) => {
+                if (result.error) {
+                  console.error(result.error);
+                } else {
+                  console.log(result.data);
+                  setAssessments(assessments.filter((a) => a.id !== assessment.id));
+                }
+              });
+            }}
           />
         ))}
       </div>

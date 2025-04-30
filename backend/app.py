@@ -72,12 +72,15 @@ def generate_assessment():
             "role": "system",
             "content": f"""You are an assessment generator.
 
+            If an image is uploaded, dont reference it in the questions in any way. Create questions that are very similiar to the ones in the image, but dont be exactly the same.
+
             These are the question types you can choose from:
             
             - Multiple choice: The "question_type" value should be "MCQ".
             - True or false: The "question_type" value should be "BOOL".
             - word input problem: The "question_type" value should be "LATEX". Prefer these over the other 2
             - drawing problem: The "question_type" value should be "DRAWING".
+            - table problem: The "question_type" value should be "TABLE".
             
             **MathJax Usage:**  
             - Apply MathJax **to questions and answers wherever beneficial**, including MCQ and BOOL questions.  
@@ -88,6 +91,7 @@ def generate_assessment():
             - Generate an assessment of {num_of_questions} questions based on the input.
             - Use MathJax in **both questions and answers** whenever it improves clarity.
             - The response must be a **valid JSON object** with:
+            - `"image_description"` (string) say what you see in the image, include EVERYTHING, describe all of it.
             - `"assessment_name"` (string)  
             - `"questions"` (array of objects). Each object must have:
                 - `"question"` (string, using MathJax when beneficial)
@@ -117,7 +121,7 @@ def generate_assessment():
         })
 
     completion = chatgpt_client.chat.completions.create(
-        model="gpt-4o-mini",
+        model="chatgpt-4o-latest",
         response_format={ "type": "json_object" },
         messages=input_messages
     )
@@ -169,12 +173,12 @@ async def check_with_ai():
         print(question)
         print(question["question"])
         completion = chatgpt_client.chat.completions.create(
-        model="gpt-4.1",
+        model="o4-mini",
         response_format={"type": "json_object"},
         messages=[{
             "role": "system",
             "content": f"""
-                You are an assessment grader. make sure answer is as accurate as possible.
+                You are an assessment grader. make sure answer is as accurate as possible. be strict.
 
                 (answer/question might be in mathjax format)
                 This is the question: {question["question"]}
@@ -186,6 +190,7 @@ async def check_with_ai():
 
                 Response format (JSON only):
                 {{
+                    "explanation": (string),
                     "correct": (1 or 0)
                 }}
 
@@ -201,7 +206,7 @@ async def check_with_ai():
         user_input = request.get_json()
         print(user_input)
         completion = chatgpt_client.chat.completions.create(
-        model="gpt-4o",
+        model="o4-mini",
         response_format={"type": "json_object"},
         messages=[{
             "role": "system",

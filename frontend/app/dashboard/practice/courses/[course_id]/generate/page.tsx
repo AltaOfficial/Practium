@@ -28,9 +28,9 @@ export default function GenerateTestPage() {
     setIsGenerating(false);
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      const newFiles = Array.from(e.target.files);
+  const handleFileUpload = (fileList: FileList | null) => {
+    if (fileList) {
+      const newFiles = Array.from(fileList);
       setUploadedFiles([...uploadedFiles, ...newFiles]);
 
       if (hiddenFilesInput.current) {
@@ -40,7 +40,6 @@ export default function GenerateTestPage() {
         );
         hiddenFilesInput.current.files = dataTransfer.files;
       }
-      e.target.value = "";
     }
   };
 
@@ -107,7 +106,12 @@ export default function GenerateTestPage() {
             </label>
             <div
               onClick={() => fileInputRef.current?.click()}
-              className="border-2 border-dashed border-gray-300 rounded-md p-8 text-center cursor-pointer hover:border-[#333333] transition-colors"
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault();
+                handleFileUpload(e.dataTransfer.files);
+              }}
+              className="border-2 border-dashed border-gray-300 rounded-md p-8 text-center cursor-pointer drop: hover:border-[#333333] transition-colors"
             >
               <p className="text-gray-600 mb-1">
                 Drop files here or click to upload
@@ -119,7 +123,7 @@ export default function GenerateTestPage() {
                 name="uploadedFiles"
                 multiple
                 accept="image/*,.pdf"
-                onChange={handleFileUpload}
+                onChange={(e) => handleFileUpload(e.target.files)}
                 className="hidden"
               />
             </div>

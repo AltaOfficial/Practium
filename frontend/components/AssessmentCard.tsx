@@ -1,6 +1,8 @@
 "use client";
 import { useRouter } from "next/navigation";
-import { FiMoreVertical } from "react-icons/fi";
+import { FiMoreVertical, FiTrash } from "react-icons/fi";
+import { deleteAssessment } from "../app/dashboard/practice/courses/[course_id]/actions";
+import { DropdownMenu } from "@radix-ui/themes";
 
 type AssessmentCardProps = {
   title: string;
@@ -9,6 +11,7 @@ type AssessmentCardProps = {
   lastAccessed: string;
   course_id: string;
   assessment_id: string;
+  deleteAssessment: (assessmentId: string) => void;
 }
 
 export default function AssessmentCard({
@@ -17,7 +20,8 @@ export default function AssessmentCard({
   answeredQuestions,
   lastAccessed,
   course_id,
-  assessment_id
+  assessment_id,
+  deleteAssessment
 }: AssessmentCardProps) {
   const router = useRouter();
   
@@ -44,12 +48,13 @@ export default function AssessmentCard({
         >
           Start
         </button>
-        <button
-          onClick={() => {}}
-          className="text-gray-500 hover:text-gray-700 p-1"
-        >
-          <FiMoreVertical size={20} />
-        </button>
+        <FiTrash
+          size={27}
+          className="text-gray-500 hover:text-red-500 p-1 hover:cursor-pointer"
+          onClick={() => {
+            deleteAssessment(assessment_id);
+          }}
+        />
       </div>
     </div>
   );
