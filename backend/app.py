@@ -53,7 +53,6 @@ def generate_assessment():
         if image.filename == "undefined":
             continue
 
-        current_image_base64 = ""
         if image.content_type == "application/pdf":
             # convert pdf pages into images
             pdfs_as_imgs = convert_from_bytes(image.read(), fmt="jpeg")
@@ -62,6 +61,7 @@ def generate_assessment():
                 page.save(buffer, format="JPEG")
                 current_image_base64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
                 images_base64_encoded.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{current_image_base64}"}})
+                print(f"data:image/jpeg;base64,{current_image_base64}")
 
         else:
             current_image_base64 = base64.b64encode(image.read()).decode("utf-8") # openai api takes in images as base64
@@ -70,7 +70,7 @@ def generate_assessment():
 
     input_messages = [{
             "role": "system",
-            "content": f"""You are an assessment generator.
+            "content": f"""Create question(s) based on the image(s) and text input.
 
             If an image is uploaded, dont reference it in the questions in any way. Create questions that are very similiar to the ones in the image, but dont be exactly the same.
 
