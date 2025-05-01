@@ -14,8 +14,7 @@ from clerk_backend_api.jwks_helpers import AuthenticateRequestOptions
 import os
 from io import BytesIO
 import base64
-from pdf2image import convert_from_bytes
-from PIL import Image
+import fitz
 
 # Load environment variables
 load_dotenv()
@@ -55,13 +54,11 @@ def generate_assessment():
 
         if image.content_type == "application/pdf":
             # convert pdf pages into images
-            pdfs_as_imgs = convert_from_bytes(image.read(), fmt="jpeg")
+            pdfs_as_imgs = fitz.open(stream=image.read(), filetype="pdf")
             for page in pdfs_as_imgs:
-                buffer = BytesIO()
-                page.save(buffer, format="JPEG")
-                current_image_base64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
-                images_base64_encoded.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{current_image_base64}"}})
-                print(f"data:image/jpeg;base64,{current_image_base64}")
+                pix = page.get_pixmap(matrix=fitz.Matrix(300/72, 300/72), alpha=False)
+                current_image_base64 = base64.b64encode(pix.tobytes()).decode("ascii")
+                images_base64_encoded.append({"type": "image_url", "image_url": {"url": f"data:image/png;base64,{current_image_base64}"}})
 
         else:
             current_image_base64 = base64.b64encode(image.read()).decode("utf-8") # openai api takes in images as base64

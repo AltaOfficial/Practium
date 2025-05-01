@@ -12,7 +12,6 @@ export default function GenerateTestPage() {
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const hiddenFilesInput = useRef<HTMLInputElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -34,6 +33,7 @@ export default function GenerateTestPage() {
       setUploadedFiles([...uploadedFiles, ...newFiles]);
 
       if (hiddenFilesInput.current) {
+ 
         const dataTransfer = new DataTransfer();
         [...uploadedFiles, ...newFiles].forEach((file) =>
           dataTransfer.items.add(file)
@@ -105,7 +105,7 @@ export default function GenerateTestPage() {
               Attachments
             </label>
             <div
-              onClick={() => fileInputRef.current?.click()}
+              onClick={() => hiddenFilesInput.current?.click()}
               onDragOver={(e) => e.preventDefault()}
               onDrop={(e) => {
                 e.preventDefault();
@@ -118,12 +118,14 @@ export default function GenerateTestPage() {
               </p>
               <p className="text-sm text-gray-500">Supports images and PDFs</p>
               <input
-                ref={fileInputRef}
+                ref={hiddenFilesInput}
                 type="file"
                 name="uploadedFiles"
                 multiple
                 accept="image/*,.pdf"
-                onChange={(e) => handleFileUpload(e.target.files)}
+                onChange={(e) => {
+                  handleFileUpload(e.target.files);
+                }}
                 className="hidden"
               />
             </div>

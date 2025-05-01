@@ -270,6 +270,7 @@ export default function page() {
                       }}
                       className="space-y-2"
                     >
+                      <MathJax>
                       {currentQuestionData.answers?.map((answer, index) => (
                         <div
                           key={index}
@@ -282,6 +283,7 @@ export default function page() {
                           <label className="text-[#333333]">{answer}</label>
                         </div>
                       ))}
+                      </MathJax>
                     </RadioGroup.Root>
                   )}
 

@@ -2,7 +2,7 @@ FROM python:3.12-alpine AS builder
 
 WORKDIR /app
 
-RUN apk add poppler-utils
+RUN apk add freetype libjpeg-turbo
 
 COPY requirements.txt /app
 RUN if [ -f requirements.txt ]; then pip install -r requirements.txt; \

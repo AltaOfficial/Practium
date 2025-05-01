@@ -5,4 +5,4 @@ flask_cors
 supabase
 clerk_backend_api
 asyncio
-pdf2image
+pymupdf
