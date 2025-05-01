@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { sendCheckWithAI, getQuestions, getAssessment } from "./actions";
+import { sendCheckWithAI, getQuestions, getAssessment, getYoutubeVideoSuggestions } from "./actions";
 import { useParams } from "next/navigation";
 import { Database } from "@/utils/supabase/database.types";
 import { DropdownMenu, RadioGroup, TextArea, Button } from "@radix-ui/themes";
@@ -34,6 +34,11 @@ interface CanvasPath {
   endTimestamp?: number;
 }
 
+interface VideoSuggestion {
+  thumbnailUrl: string;
+  videoId: string;
+}
+
 export default function page() {
   const params = useParams();
   const [questions, setQuestions] = useState<Question[]>();
@@ -43,6 +48,7 @@ export default function page() {
   const [currentQuestionChat, setCurrentQuestionChat] = useState("### Step 3");
   const [assessmentName, setAssessmentName] = useState("Assessment"); // TODO: Fetch assessment name
   const [isVideosVisible, setIsVideosVisible] = useState(false);
+  const [videoSuggestions, setVideoSuggestions] = useState<VideoSuggestion[]>([]);
   const canvasRef = useRef<ReactSketchCanvasRef>(null);
 
   useEffect(() => {
@@ -78,6 +84,11 @@ export default function page() {
       } else if (questions[currentQuestion]?.question_type === "DRAWING") {
         canvasRef.current?.clearCanvas();
       }
+      getYoutubeVideoSuggestions({
+        question: questions[currentQuestion],
+      }).then((data) => {
+        setVideoSuggestions(data.data);
+      });
     }
   }, [currentQuestion, questions?.length]);
 
@@ -444,7 +455,13 @@ export default function page() {
             >
               <div
                 className="flex items-center space-x-2 text-[#333333] flex-col hover:cursor-pointer"
-                onClick={() => setIsVideosVisible(!isVideosVisible)}
+                onClick={() => {
+                  if(isVideosVisible) {
+                    setIsVideosVisible(false);
+                  } else if(!isVideosVisible && videoSuggestions.length > 0) {
+                    setIsVideosVisible(true);
+                  }
+                }}
               >
                 <FiChevronDown
                   size={20}
@@ -455,53 +472,17 @@ export default function page() {
                 <p className="text-sm font-medium">Suggested YouTube videos</p>
               </div>
               <div className="flex space-x-4 pb-3 pr-1 max-w-full mt-auto text-black overflow-x-scroll">
-                <div className="h-28 min-w-44 border border-[#333333] rounded-md shadow-[2px_3px_0_0px_rgba(51,51,51,1)]">
-                  <Image
+                {videoSuggestions.map((video) => (
+                  <a key={video.videoId} href={`https://www.youtube.com/watch?v=${video.videoId}`} target="_blank" className="h-28 min-w-44 border border-[#333333] rounded-md shadow-[2px_3px_0_0px_rgba(51,51,51,1)]">
+                    <Image
                     className="w-full h-full object-cover rounded-md border border-white"
-                    src="https://i.ytimg.com/vi/xbviQHhU1rA/hq720.jpg?sqp=-oaymwEnCNAFEJQDSFryq4qpAxkIARUAAIhCGAHYAQHiAQoIGBACGAY4AUAB&rs=AOn4CLBScuQmLIFGTtBoTK-SI7o7yqCOYA"
+                    src={video.thumbnailUrl}
                     alt="Youtube"
                     width={100}
                     height={100}
-                  />
-                </div>
-                <div className="h-28 min-w-44 border border-[#333333] rounded-md shadow-[2px_3px_0_0px_rgba(51,51,51,1)] relative">
-                  <Image
-                    className="w-full h-full object-cover rounded-md border border-white"
-                    src="https://i.ytimg.com/vi/rEqWOrLGBP0/hqdefault.jpg?sqp=-oaymwFBCNACELwBSFryq4qpAzMIARUAAIhCGAHYAQHiAQoIGBACGAY4AUAB8AEB-AH-CYAC0AWKAgwIABABGGUgZShlMA8=&rs=AOn4CLC32Tm_rFPKfrhzhl18DwdXvHbdGQ"
-                    alt="Youtube"
-                    width={112}
-                    height={176}
-                  />
-                  <BsYoutube
-                    size={20}
-                    color="red"
-                    className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10"
-                  />
-                </div>
-                <div className="h-28 min-w-44 border border-[#333333] rounded-md shadow-[2px_3px_0_0px_rgba(51,51,51,1)]">
-                  <Image
-                    src="/images/youtube.png"
-                    alt="Youtube"
-                    width={100}
-                    height={100}
-                  />
-                </div>
-                <div className="h-28 min-w-44 border border-[#333333] rounded-md shadow-[2px_3px_0_0px_rgba(51,51,51,1)]">
-                  <Image
-                    src="/images/youtube.png"
-                    alt="Youtube"
-                    width={100}
-                    height={100}
-                  />
-                </div>
-                <div className="h-28 min-w-44 border border-[#333333] rounded-md shadow-[2px_3px_0_0px_rgba(51,51,51,1)]">
-                  <Image
-                    src="/images/youtube.png"
-                    alt="Youtube"
-                    width={100}
-                    height={100}
-                  />
-                </div>
+                    />
+                  </a>
+                ))}
               </div>
             </div>
           </div>

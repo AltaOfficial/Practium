@@ -141,6 +141,25 @@ def generate_assessment():
 
     assesment_id = supabase.table("assessments").insert({ "user_id": user_id, "total_questions": num_of_questions, "name": parsed_assessment["assessment_name"], "course_id": request.form.get("courseId", 1) }).execute().data[0]["id"]
     print(assesment_id)
+
+    # check if we got the right amount of questions
+    def check_questions_length():
+        if len(parsed_assessment["questions"]) < int(num_of_questions):
+            completion = chatgpt_client.chat.completions.create(
+                model="chatgpt-4o-latest",
+                response_format={ "type": "json_object" },
+                messages=input_messages.append({
+                    "role": "user",
+                    "content": [{"type": "text", "text": f"give me {int(num_of_questions) - len(parsed_assessment["questions"])} more questions"}]
+                })
+            )
+            more_questions = json.loads(completion.choices[0].message.content.strip())
+            parsed_assessment["questions"].extend(more_questions["questions"][:int(num_of_questions) - len(parsed_assessment["questions"])])
+            if len(parsed_assessment["questions"]) < int(num_of_questions):
+                check_questions_length()
+
+    check_questions_length()
+
     for question in parsed_assessment["questions"]:
         if question["question_type"] == "MCQ":
             questions.append({

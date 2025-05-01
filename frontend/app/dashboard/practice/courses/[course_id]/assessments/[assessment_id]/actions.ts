@@ -100,3 +100,34 @@ export async function sendCheckWithAI({
 
   return { correct: res.correct };
 }
+
+export async function getYoutubeVideoSuggestions({
+  question,
+}: {
+  question: Question;
+}) {
+  const response = await fetch("https://www.youtube.com/youtubei/v1/search?prettyPrint=false", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({"context":{"client":{"hl":"en","gl":"US","clientName":"WEB","clientVersion":"2.20250430.01.00","originalUrl":`https://www.youtube.com/results?search_query=${question.question}`},"request":{"useSsl":true}},"query":`${question.question + " organic chemistry tutor"}`}),
+  });
+
+  const data = await response.json();
+
+  if(!data.contents) {
+    return { data: [] };
+  }
+
+  const videoSuggestions = data.contents.twoColumnSearchResultsRenderer.primaryContents.sectionListRenderer.contents[0].itemSectionRenderer.contents.map((video: any) => {
+    if(video.videoRenderer) {
+      return {
+        thumbnailUrl: video.videoRenderer.thumbnail.thumbnails[0].url,
+        videoId: video.videoRenderer.videoId,
+      };
+    }
+  });
+
+  return { data: videoSuggestions.splice(0,10) };
+}
