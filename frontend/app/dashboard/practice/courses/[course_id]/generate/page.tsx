@@ -1,7 +1,6 @@
 "use client";
 import { generateAssessment } from "./actions";
 import { useParams, useRouter } from "next/navigation";
-import { TextArea, Button } from "@radix-ui/themes";
 import { useState, useRef } from "react";
 import Link from "next/link";
 import { FiArrowLeft } from "react-icons/fi";

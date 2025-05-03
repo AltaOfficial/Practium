@@ -1,12 +1,9 @@
-import { Button, DropdownMenu, TextField, HoverCard } from "@radix-ui/themes";
+import { Button, TextField } from "@radix-ui/themes";
 import { useState, Dispatch, SetStateAction, useRef, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeKatex from "rehype-katex";
-import RemarkMathPlugin from "remark-math";
+import remarkMath from "remark-math";
 import "katex/dist/katex.min.css";
-import { Components } from "react-markdown";
-import Latex from "react-latex-next";
-import MathJax from "react-mathjax";
 
 export default function ChatWithAI({
   currentQuestionChat,
@@ -81,6 +78,20 @@ export default function ChatWithAI({
     setMessageInput("");
   };
 
+  // Function to convert LaTeX delimiters to KaTeX format
+  const convertMathDelimiters = (text: string) => {
+    return text
+      .replace(/\\\(/g, '$')
+      .replace(/\\\)/g, '$')
+      .replace(/\\\[/g, '$$')
+      .replace(/\\\]/g, '$$');
+  };
+
+  // Function to replace "---" with markdown horizontal rule
+  const replaceHorizontalRule = (text: string) => {
+    return text.replace(/---/g, '\n---\n');
+  };
+
   return (
     <div className="p-3 bg-white rounded-lg flex flex-col gap-5">
       <div className="h-8 flex flex-row-reverse justify-between place-items-center">
@@ -88,7 +99,7 @@ export default function ChatWithAI({
           <button
             onClick={() => setCurrentQuestionChat("")}
             className="!bg-transparent flex items-center outline-none px-3 py-1.5 !border-2 !border-[#333333] text-[#333333] text-sm rounded-[4px] font-medium"
-            >
+          >
             Restart Chat
           </button>
         </div>
@@ -97,6 +108,7 @@ export default function ChatWithAI({
         <div className="flex-1 w-full overflow-y-auto" ref={chatContainerRef}>
           <div className="w-full">
             <ReactMarkdown
+              remarkPlugins={[remarkMath]}
               rehypePlugins={[rehypeKatex]}
               components={{
                 p: ({ children }) => {
@@ -107,28 +119,18 @@ export default function ChatWithAI({
                   ) {
                     return <div className="mt-4 mb-6">{children}</div>;
                   }
-                  // Handle horizontal rules within paragraphs
-                  if (content.includes("---")) {
-                    const parts = content.split("---");
-                    return (
-                      <div>
-                        {parts.map((part, index) => (
-                          <div key={index}>
-                            {index > 0 && (
-                              <hr className="my-4 border-t border-gray-700" />
-                            )}
-                            <p>{part}</p>
-                          </div>
-                        ))}
-                      </div>
-                    );
-                  }
                   return <p>{children}</p>;
                 },
                 hr: () => <hr className="my-4 border-t border-gray-700" />,
+                h1: ({ children }) => <h1 className="text-2xl mt-6 mb-4">{children}</h1>,
+                h2: ({ children }) => <h2 className="text-xl mt-5 mb-3">{children}</h2>,
+                h3: ({ children }) => <h3 className="text-lg mt-4 mb-2">{children}</h3>,
+                h4: ({ children }) => <h4 className="text-base mt-3 mb-2">{children}</h4>,
+                h5: ({ children }) => <h5 className="text-sm mt-2 mb-1">{children}</h5>,
+                h6: ({ children }) => <h6 className="text-xs mt-2 mb-1">{children}</h6>,
               }}
             >
-              {currentQuestionChat}
+              {replaceHorizontalRule(convertMathDelimiters(currentQuestionChat))}
             </ReactMarkdown>
           </div>
         </div>

@@ -270,10 +270,11 @@ def explain_problem():
                 {"role": "system", "content": (
                     """You are an AI assistant providing educational explanations.
 
+                    For math expressions, use the following format:
+
                     """
                 )},
                 {"role": "user", "content": f"""Explain how to solve this problem in detail:\n\n{problem}
-                    use \n for line breaks
                 """}
             ],
             stream=True
@@ -342,42 +343,15 @@ def ask_ai():
         system_message = {
             "role": "system",
             "content": """
-            markdown format
-            see how its like this:
-            use new lines
+            For math expressions, use the following format:
+            - For inline math: $1.45 \times 10^{-2}$
+            - For display math: $$1.45 \times 10^{-2}$$
             
-            {"p": "/message/content/parts/0", "o": "append", "v": "Sure! Here's a **thermochemistry problem"}	
-            07:42:14.505
-            delta	{"v": "** involving **enthalpy and heat transfer"}	
-            07:42:14.827
-            message	{"type": "title_generation", "title": "Thermochemistry problem and solution", "conversation_id": "67fa5195-7ac8-800a-bc52-33691f8827c4"}	
-            07:42:14.995
-            delta	{"v": "**, followed by a step-by-step solution"}	
-            07:42:15.011
-            delta	{"v": ".\n\n---\n\n### \\ud83d\\udd25 **Problem**"}	
-            07:42:15.210
-            delta	{"v": ":\nA 50.0 g block of iron at 100.0\\u00b0C"}	
-            07:42:15.548
-            delta	{"v": " is placed into 200.0 g of water at 25.0\\u00b0C"}	
-            07:42:15.763
-            delta	{"v": ". Assuming no heat is lost to the"}	
-            07:42:15.995
-            delta	{"v": " surroundings, what will be the final temperature"}	
-            07:42:16.330
-            delta	{"v": " of the system?\n\n**Given**:\n- Specific heat of iron, \\( c"}	
-            07:42:16.560
-            delta	{"v": "_{\\text{Fe}} = 0.450 \\, \\text{J"}	
-            07:42:16.821
-            delta	{"v": "/g\\u00b0C} \\) \\n- Specific heat of water, \\( c_{\\text{H}_2\\text{O}} = 4.18 \\,"}	
-            07:42:17.050
-            delta	{"v": " \\text{J/g\\u00b0C} \\"}	
-            07:42:17.296
-            delta	{"v": ")\n\n---\n\n### \\ud83e\\uddea **Solution"}	
-            07:42:17.572
-            delta	{"v": "**:\n\nLet the final temperature be \\( T_f \\). \nHeat lost by"}	
+            Do not use LaTeX delimiters like \(...\) or \[...\]
             """
         }
         messages.insert(0, system_message)
+        print(messages)
     except Exception as e:
         return jsonify({"error": f"Invalid messages format: {str(e)}"}), 400
     
