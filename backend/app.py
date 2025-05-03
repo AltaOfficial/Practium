@@ -12,7 +12,6 @@ from client import supabase
 from clerk_backend_api import Clerk
 from clerk_backend_api.jwks_helpers import AuthenticateRequestOptions
 import os
-from io import BytesIO
 import base64
 import fitz
 
@@ -30,15 +29,13 @@ CORS(server, supports_credentials=True)
 
 @server.route('/')
 def index():
-    response = supabase.table("assessments").select("*").eq("user_id", "user_2t8a9D9AoXQQmR84PB4yRI2B1Kc").execute().data
-    request_state = clerk_client.authenticate_request(request, AuthenticateRequestOptions(authorized_parties=["http://frontend:3000", "http://localhost:3000"]))
+    request_state = clerk_client.authenticate_request(request, AuthenticateRequestOptions(authorized_parties=["http://frontend:3000", os.environ.get("FRONTEND_URL")]))
     print(request_state)
-    print(response)
-    return jsonify({ "message": response })  # Return response as JSON
+    return jsonify({ "message": request_state })  # Return response as JSON
 
 @server.route("/generateassessement", methods=["POST"])
 def generate_assessment():
-    request_state = clerk_client.authenticate_request(request, AuthenticateRequestOptions(authorized_parties=["http://frontend:3000", "http://localhost:3000"]))
+    request_state = clerk_client.authenticate_request(request, AuthenticateRequestOptions(authorized_parties=["http://frontend:3000", os.environ.get("FRONTEND_URL")]))
     if request_state.is_signed_in != True:
         return jsonify({"message": "User not logged in"})
     user_id = request_state.payload.get("sub")

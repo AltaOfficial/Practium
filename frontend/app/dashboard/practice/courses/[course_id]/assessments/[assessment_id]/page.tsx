@@ -51,7 +51,7 @@ export default function AssessmentPage() {
         setCurrentAnswer(data[currentQuestion]?.given_answer || "");
       }
     });
-  });
+  }, [currentQuestion, questions?.length]);
 
   // this is ran after questions in loaded
   useEffect(() => {
@@ -75,7 +75,7 @@ export default function AssessmentPage() {
         setVideoSuggestions(data.data);
       });
     }
-  }, [currentQuestion, questions]);
+  }, [currentQuestion, questions?.length]);
 
   function checkWithAI({
     question,
