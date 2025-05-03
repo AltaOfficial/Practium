@@ -22,7 +22,8 @@ export async function generateAssessment(formData: FormData) {
   }
 
   console.log(formData);
-
+  console.log(process.env.VERCEL_ENV);
+  console.log(process.env.BACKEND_URL);
   const response = await fetch(`${process.env.VERCEL_ENV == "production" ? process.env.BACKEND_URL : "http://backend:8000"}/generateassessement`, {
     method: "POST",
     body: formData,
@@ -31,6 +32,8 @@ export async function generateAssessment(formData: FormData) {
       Authorization: `Bearer ${token}`,
     },
   });
+
+  console.log(response);
 
   if (response.status == 200) {
     console.log(await response.json());
