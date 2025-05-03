@@ -4,12 +4,12 @@ import { useEffect, useState } from "react"
 import Flashcard from "@/components/Flashcard"
 
 interface Flashcard {
-  id: Number
+  id: number
   name: string,
-  totalCards: Number
+  totalCards: number
 }
 
-export default function page() {
+export default function MemoryPage() {
   const [flashcards, setFlashcards] = useState<Flashcard[]>([]);
 
   useEffect(() => {
@@ -25,7 +25,7 @@ export default function page() {
     <div>
         <div className="text-3xl">Flashcards</div>
         <div>
-          {flashcards.map((flashcard, index) => <Flashcard flashcardTotal={flashcard.totalCards} flashcardName={flashcard.name}/>)}
+          {flashcards.map((flashcard, index) => <Flashcard key={index} flashcardTotal={flashcard.totalCards} flashcardName={flashcard.name}/>)}
         </div>
     </div>
   )

@@ -1,8 +1,4 @@
-import { Database } from "@/utils/supabase/database.types";
 import { FaRegClock } from "react-icons/fa";
-
-
-type Course = Database["public"]["Tables"]["courses"]["Row"];
 
 type CourseCardProps = {
   courseName: string;

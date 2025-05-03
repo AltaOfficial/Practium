@@ -120,7 +120,16 @@ export async function getYoutubeVideoSuggestions({
     return { data: [] };
   }
 
-  const videoSuggestions = data.contents.twoColumnSearchResultsRenderer.primaryContents.sectionListRenderer.contents[0].itemSectionRenderer.contents.map((video: any) => {
+  type Video = {
+    videoRenderer: {
+      thumbnail: {
+        thumbnails: { url: string }[];
+      };
+      videoId: string;
+    };
+  }
+
+  const videoSuggestions = data.contents.twoColumnSearchResultsRenderer.primaryContents.sectionListRenderer.contents[0].itemSectionRenderer.contents.map((video: Video) => {
     if(video.videoRenderer) {
       return {
         thumbnailUrl: video.videoRenderer.thumbnail.thumbnails[0].url,

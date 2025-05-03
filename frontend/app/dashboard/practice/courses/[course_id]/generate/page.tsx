@@ -42,17 +42,6 @@ export default function GenerateTestPage() {
     }
   };
 
-  const removeFile = (fileToRemove: File) => {
-    const updatedFiles = uploadedFiles.filter((file) => file !== fileToRemove);
-    setUploadedFiles(updatedFiles);
-
-    if (hiddenFilesInput.current) {
-      const dataTransfer = new DataTransfer();
-      updatedFiles.forEach((file) => dataTransfer.items.add(file));
-      hiddenFilesInput.current.files = dataTransfer.files;
-    }
-  };
-
   return (
     <div className="max-w-7xl mx-auto py-12">
       <div className="flex justify-between items-center mb-8">

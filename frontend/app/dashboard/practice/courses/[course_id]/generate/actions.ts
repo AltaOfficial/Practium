@@ -23,7 +23,7 @@ export async function generateAssessment(formData: FormData) {
 
   console.log(formData);
 
-  let response = await fetch(`http://backend:8000/generateassessement`, {
+  const response = await fetch(`http://backend:8000/generateassessement`, {
     method: "POST",
     body: formData,
     headers: {

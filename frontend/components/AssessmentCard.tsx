@@ -1,8 +1,6 @@
 "use client";
 import { useRouter } from "next/navigation";
-import { FiMoreVertical, FiTrash } from "react-icons/fi";
-import { deleteAssessment } from "../app/dashboard/practice/courses/[course_id]/actions";
-import { DropdownMenu } from "@radix-ui/themes";
+import { FiTrash } from "react-icons/fi";
 
 type AssessmentCardProps = {
   title: string;

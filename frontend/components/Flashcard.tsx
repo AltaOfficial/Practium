@@ -3,11 +3,11 @@ export default function Flashcard({
   flashcardTotal,
 }: {
   flashcardName: string;
-  flashcardTotal: string | Number;
+  flashcardTotal: string | number;
 }) {
   return (
     <div>
-      <div>Flashcard Name</div>
+      <div>{flashcardName} ({flashcardTotal} cards)</div>
     </div>
   );
 }

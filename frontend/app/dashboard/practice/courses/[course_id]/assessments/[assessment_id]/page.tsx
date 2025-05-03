@@ -3,16 +3,15 @@ import { useEffect, useRef, useState } from "react";
 import { sendCheckWithAI, getQuestions, getAssessment, getYoutubeVideoSuggestions } from "./actions";
 import { useParams } from "next/navigation";
 import { Database } from "@/utils/supabase/database.types";
-import { DropdownMenu, RadioGroup, TextArea, Button } from "@radix-ui/themes";
+import { DropdownMenu, RadioGroup, Button } from "@radix-ui/themes";
 import {
   FiCheck,
   FiChevronDown,
   FiChevronRight,
-  FiChevronUp,
   FiX,
 } from "react-icons/fi";
 import { FaRedo } from "react-icons/fa";
-import { BsYoutube } from "react-icons/bs";
+
 import { MathJax } from "better-react-mathjax";
 import ChatWithAI from "@/components/ChatWithAI";
 import Image from "next/image";
@@ -20,26 +19,12 @@ import { ReactSketchCanvas, ReactSketchCanvasRef } from "react-sketch-canvas";
 
 type Question = Database["public"]["Tables"]["questions"]["Row"];
 
-interface Point {
-  x: number;
-  y: number;
-}
-
-interface CanvasPath {
-  paths: Point[];
-  strokeWidth: number;
-  strokeColor: string;
-  drawMode: boolean;
-  startTimestamp?: number;
-  endTimestamp?: number;
-}
-
 interface VideoSuggestion {
   thumbnailUrl: string;
   videoId: string;
 }
 
-export default function page() {
+export default function AssessmentPage() {
   const params = useParams();
   const [questions, setQuestions] = useState<Question[]>();
   const [currentQuestion, setCurrentQuestion] = useState(0);
@@ -66,7 +51,7 @@ export default function page() {
         setCurrentAnswer(data[currentQuestion]?.given_answer || "");
       }
     });
-  }, []);
+  });
 
   // this is ran after questions in loaded
   useEffect(() => {
@@ -90,7 +75,7 @@ export default function page() {
         setVideoSuggestions(data.data);
       });
     }
-  }, [currentQuestion, questions?.length]);
+  }, [currentQuestion, questions]);
 
   function checkWithAI({
     question,
@@ -290,7 +275,7 @@ export default function page() {
                   {currentQuestionData.question_type === "DRAWING" && (
                     <ReactSketchCanvas
                       ref={canvasRef}
-                      onStroke={(value: CanvasPath) => {
+                      onStroke={() => {
                         canvasRef.current?.exportPaths().then((data) => {
                           setCurrentAnswer(JSON.stringify(data));
                           setQuestions(

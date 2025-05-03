@@ -346,8 +346,6 @@ def ask_ai():
             For math expressions, use the following format:
             - For inline math: $1.45 \times 10^{-2}$
             - For display math: $$1.45 \times 10^{-2}$$
-            
-            Do not use LaTeX delimiters like \(...\) or \[...\]
             """
         }
         messages.insert(0, system_message)

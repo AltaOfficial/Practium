@@ -7,7 +7,7 @@ export async function getAssesments(courseId: number) {
     return { error: "Course ID is not defined" };
   }
 
-  let assesments = await supabase
+  const assesments = await supabase
     .from("assessments")
     .select()
     .eq("course_id", courseId)
