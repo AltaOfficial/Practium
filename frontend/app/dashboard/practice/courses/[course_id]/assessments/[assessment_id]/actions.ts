@@ -66,6 +66,8 @@ export async function sendCheckWithAI({
 
     res = await response.json();
   } else {
+    console.log(process.env.VERCEL_ENV);
+    console.log(process.env.BACKEND_URL);
     const response = await fetch(`${process.env.VERCEL_ENV == "production" ? process.env.BACKEND_URL : "http://backend:8000"}/checkwithai`, {
       method: "POST",
       headers: {
@@ -73,6 +75,7 @@ export async function sendCheckWithAI({
       },
       body: JSON.stringify({ question: question, answer: answer }),
     });
+    console.log(response);
 
     if (!response.ok) {
       return { error: "Failed to check answer with AI" };
