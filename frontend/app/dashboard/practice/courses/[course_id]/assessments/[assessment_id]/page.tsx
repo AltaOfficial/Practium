@@ -231,7 +231,7 @@ export default function AssessmentPage() {
               }
             `}
               >
-                <MathJax className="text-[#333333] mb-6">
+                <MathJax inline dynamic className="text-[#333333] mb-6">
                   {currentQuestionData.question}
                 </MathJax>
 
@@ -255,7 +255,7 @@ export default function AssessmentPage() {
                       }}
                       className="space-y-2"
                     >
-                      <MathJax>
+                      <MathJax inline dynamic>
                       {currentQuestionData.answers?.map((answer, index) => (
                         <div
                           key={index}
