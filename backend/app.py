@@ -37,7 +37,7 @@ def index():
 def generate_assessment():
     request_state = clerk_client.authenticate_request(request, AuthenticateRequestOptions(authorized_parties=["http://frontend:3000", os.environ.get("FRONTEND_URL")]))
     if request_state.is_signed_in != True:
-        return jsonify({"message": "User not logged in"})
+        return jsonify({"message": request_state.reason})
     user_id = request_state.payload.get("sub")
     num_of_questions = request.form.get("numOfQuestions", 10) # number of questions to produce
     form_images = request.files.getlist("uploadedFiles") # images to create a question from
