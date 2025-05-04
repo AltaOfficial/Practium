@@ -231,9 +231,11 @@ export default function AssessmentPage() {
               }
             `}
               >
-                <MathJax inline dynamic className="text-[#333333] mb-6">
-                  {currentQuestionData.question}
-                </MathJax>
+                <div className="mb-6">
+                  <MathJax inline dynamic className="text-[#333333]">
+                    {currentQuestionData.question}
+                  </MathJax>
+                </div>
 
                 <div className="space-y-4">
                   {currentQuestionData.question_type === "MCQ" && (
@@ -255,7 +257,7 @@ export default function AssessmentPage() {
                       }}
                       className="space-y-2"
                     >
-                      <MathJax inline dynamic>
+                      <MathJax inline dynamic className="text-[#333333]">
                       {currentQuestionData.answers?.map((answer, index) => (
                         <div
                           key={index}
