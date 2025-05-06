@@ -186,7 +186,7 @@ async def check_with_ai():
         print(question)
         print(question["question"])
         completion = chatgpt_client.chat.completions.create(
-        model="o4-mini",
+        model="gpt-4o",
         response_format={"type": "json_object"},
         messages=[{
             "role": "system",
