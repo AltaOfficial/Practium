@@ -55,7 +55,7 @@ export async function sendCheckWithAI({
     formData.append("question", JSON.stringify(question));
     formData.append("answer", answer);
 
-    const response = await fetch(`${process.env.VERCEL_ENV == "production" ? process.env.BACKEND_URL : "http://backend:8000"}/checkwithai`, {
+    const response = await fetch(`${process.env.VERCEL_ENV == "production" ? process.env.NEXT_PUBLIC_BACKEND_URL : "http://backend:8000"}/checkwithai`, {
       method: "POST",
       body: formData,
     });
@@ -67,8 +67,8 @@ export async function sendCheckWithAI({
     res = await response.json();
   } else {
     console.log(process.env.VERCEL_ENV);
-    console.log(process.env.BACKEND_URL);
-    const response = await fetch(`${process.env.VERCEL_ENV == "production" ? process.env.BACKEND_URL : "http://backend:8000"}/checkwithai`, {
+    console.log(process.env.NEXT_PUBLIC_BACKEND_URL);
+    const response = await fetch(`${process.env.VERCEL_ENV == "production" ? process.env.NEXT_PUBLIC_BACKEND_URL : "http://backend:8000"}/checkwithai`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

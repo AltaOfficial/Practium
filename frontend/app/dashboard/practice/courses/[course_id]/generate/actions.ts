@@ -24,7 +24,7 @@ export async function generateAssessment(formData: FormData) {
   console.log(formData);
   console.log(process.env.VERCEL_ENV);
   console.log(process.env.BACKEND_URL);
-  const response = await fetch(`${process.env.VERCEL_ENV == "production" ? process.env.BACKEND_URL : "http://backend:8000"}/generateassessement`, {
+  const response = await fetch(`${process.env.VERCEL_ENV == "production" ? process.env.NEXT_PUBLIC_BACKEND_URL : "http://backend:8000"}/generateassessement`, {
     method: "POST",
     body: formData,
     headers: {
