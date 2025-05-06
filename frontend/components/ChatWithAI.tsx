@@ -57,7 +57,7 @@ export default function ChatWithAI({
     });
 
     const eventStream = new EventSource(
-      `http://localhost:8000/ask?messages=${encodeURIComponent(
+      `${process.env.NODE_ENV == "production" ? process.env.NEXT_PUBLIC_BACKEND_URL : "http://backend:8000"}/ask?messages=${encodeURIComponent(
         JSON.stringify(messages)
       )}`
     );
