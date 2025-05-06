@@ -378,7 +378,7 @@ export default function AssessmentPage() {
                     <button
                       onClick={() => {
                         const eventStream = new EventSource(
-                          `${process.env.NODE_ENV == "production" ? process.env.BACKEND_URL : "http://backend:8000"}/explanation?problem=${encodeURIComponent(
+                          `${process.env.NODE_ENV == "production" ? process.env.NEXT_PUBLIC_BACKEND_URL : "http://backend:8000"}/explanation?problem=${encodeURIComponent(
                             currentQuestionData.question || ""
                           )}`
                         );
