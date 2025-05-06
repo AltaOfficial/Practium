@@ -191,7 +191,7 @@ async def check_with_ai():
         messages=[{
             "role": "system",
             "content": f"""
-                You are an assessment grader. make sure answer is as accurate as possible. be strict.
+                You are an assessment grader. make sure answer is as accurate as possible. be strict. unless in the case of a decimal, then allow for a margin of error in rounding.
 
                 (answer/question might be in mathjax format)
                 This is the question: {question["question"]}
@@ -224,7 +224,7 @@ async def check_with_ai():
         messages=[{
             "role": "system",
             "content": f"""
-                You are an assessment grader.
+                You are an assessment grader. make sure answer is as accurate as possible. be strict. unless in the case of a decimal, then allow for a margin of error in rounding.
 
                 (answer/question might be in mathjax format)
                 This is the question: {user_input["question"]}
