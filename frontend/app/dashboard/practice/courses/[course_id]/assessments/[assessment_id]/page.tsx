@@ -378,7 +378,7 @@ export default function AssessmentPage() {
                     <button
                       onClick={() => {
                         const eventStream = new EventSource(
-                          `${process.env.VERCEL_ENV == "production" ? process.env.BACKEND_URL : "http://backend:8000"}/explanation?problem=${encodeURIComponent(
+                          `${process.env.BACKEND_URL}/explanation?problem=${encodeURIComponent(
                             currentQuestionData.question || ""
                           )}`
                         );
