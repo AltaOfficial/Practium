@@ -219,7 +219,7 @@ async def check_with_ai():
         user_input = request.get_json()
         print(user_input)
         completion = chatgpt_client.chat.completions.create(
-        model="o4-mini",
+        model="gpt-4o",
         response_format={"type": "json_object"},
         messages=[{
             "role": "system",
@@ -234,9 +234,12 @@ async def check_with_ai():
                 - 1 if the answer is correct
                 - 0 if the answer is incorrect
 
+                if the answer is incorrect, provide a detailed explanation of why it is incorrect.
+
                 Response format (JSON only):
                 {{
-                    "correct": (1 or 0)
+                    "correct": (1 or 0),
+                    "explanation": (string)
                 }}
 
                 Only return valid JSON. Do not include explanations or extra text, no commas NOTHING litterally just the json.
