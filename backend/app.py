@@ -229,8 +229,8 @@ async def check_with_ai():
                 You are an assessment grader. make sure answer is as accurate as possible. be strict. unless in the case of a decimal, if the answer is correct, but the student rounded incorrectly, still give it a 1.
 
                 (answer/question might be in mathjax format)
-                This is the question: {user_input["question"]}
-                This is the answer: {user_input["answer"]}
+                This is the question: {user_input["question"]["question"]}
+                This is the answer: {user_input["answer"]["given_answer"]}
 
                 Provide a numerical response:
                 - 1 if the answer is correct
@@ -248,8 +248,8 @@ async def check_with_ai():
             """
             }],
         )
-        print(user_input["question"])
-        print(user_input["answer"])
+        print(user_input["question"]["question"])
+        print(user_input["answer"]["given_answer"])
 
     completion_text = completion.choices[0].message.content
     print(completion_text)
