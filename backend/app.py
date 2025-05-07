@@ -68,6 +68,8 @@ def generate_assessment():
 
             If an image is uploaded, dont reference it in the questions in any way. Create questions that are very similiar to the ones in the image, but dont be exactly the same.
 
+            dont include "ext" anywhere.
+
             These are the question types you can choose from:
             
             - Multiple choice: The "question_type" value should be "MCQ".
