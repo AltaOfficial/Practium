@@ -57,7 +57,7 @@ export default function ChatWithAI({
     });
 
     const eventStream = new EventSource(
-      `${process.env.NODE_ENV == "production" ? process.env.NEXT_PUBLIC_BACKEND_URL : "http://backend:8000"}/ask?messages=${encodeURIComponent(
+      `${process.env.NODE_ENV == "production" ? process.env.NEXT_PUBLIC_BACKEND_URL : "http://localhost:8000"}/ask?messages=${encodeURIComponent(
         JSON.stringify(messages)
       )}`
     );
@@ -92,6 +92,36 @@ export default function ChatWithAI({
     return text.replace(/---/g, '\n---\n');
   };
 
+  const convertNewlines = (text: string) => {
+    // Replace single newlines not already part of a double newline
+    return text.replace(/([^\n])\n([^\n])/g, '$1\n\n$2');
+  };
+
+  const fixMathDelimiters = (text: string) => {
+    // 1. Ensure $$...$$ is on its own line (for block math)
+    text = text.replace(/\$\$([\s\S]*?)\$\$/g, '\n$$$1$$\n');
+
+    // 2. Convert \(...\) to $...$
+    text = text.replace(/\\\(([\s\S]*?)\\\)/g, '\$$1\$');
+
+    // 3. Convert \[...\] to $$...$$
+    text = text.replace(/\\\[([\s\S]*?)\\\]/g, '\n$$$1$$\n');
+
+    // 4. Remove any double $$ at the start or end of a line (if not needed)
+    text = text.replace(/([^\n])\$\$/g, '$1\n$$');
+    text = text.replace(/\$\$([^\n])/g, '$$\n$1');
+
+    return text;
+  };
+
+  const fixSingleCharLines = (text: string) => {
+    // This regex matches blocks of 5+ lines where each line is 1-2 characters (including whitespace)
+    return text.replace(/((?:^[^\S\r\n]*\S[^\S\r\n]*\r?\n){5,})/gm, (block) => {
+      // Remove newlines and join the characters
+      return block.replace(/\r?\n/g, '');
+    });
+  };
+
   return (
     <div className="p-3 bg-white rounded-lg flex flex-col gap-5">
       <div className="h-8 flex flex-row-reverse justify-between place-items-center">
@@ -122,15 +152,23 @@ export default function ChatWithAI({
                   return <p>{children}</p>;
                 },
                 hr: () => <hr className="my-4 border-t border-gray-700" />,
-                h1: ({ children }) => <h1 className="text-2xl mt-6 mb-4">{children}</h1>,
-                h2: ({ children }) => <h2 className="text-xl mt-5 mb-3">{children}</h2>,
-                h3: ({ children }) => <h3 className="text-lg mt-4 mb-2">{children}</h3>,
-                h4: ({ children }) => <h4 className="text-base mt-3 mb-2">{children}</h4>,
-                h5: ({ children }) => <h5 className="text-sm mt-2 mb-1">{children}</h5>,
+                h1: ({ children }) => <h1 className="text-xl mt-6 mb-4">{children}</h1>,
+                h2: ({ children }) => <h2 className="text-lg mt-5 mb-3">{children}</h2>,
+                h3: ({ children }) => <h3 className="text-base mt-4 mb-2">{children}</h3>,
+                h4: ({ children }) => <h4 className="text-sm mt-3 mb-2">{children}</h4>,
+                h5: ({ children }) => <h5 className="text-xs mt-2 mb-1">{children}</h5>,
                 h6: ({ children }) => <h6 className="text-xs mt-2 mb-1">{children}</h6>,
               }}
             >
-              {replaceHorizontalRule(convertMathDelimiters(currentQuestionChat))}
+              {replaceHorizontalRule(
+                convertMathDelimiters(
+                  fixMathDelimiters(
+                    convertNewlines(
+                      fixSingleCharLines(currentQuestionChat)
+                    )
+                  )
+                )
+              )}
             </ReactMarkdown>
           </div>
         </div>
