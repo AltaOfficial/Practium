@@ -102,7 +102,7 @@ export default function ChatWithAI({
     text = text.replace(/\$\$([\s\S]*?)\$\$/g, '\n$$$1$$\n');
 
     // 2. Convert \(...\) to $...$
-    text = text.replace(/\\\(([\s\S]*?)\\\)/g, '\$$1\$');
+    // text = text.replace(/\\\(([\s\S]*?)\\\)/g, '\$$1\$');
 
     // 3. Convert \[...\] to $$...$$
     text = text.replace(/\\\[([\s\S]*?)\\\]/g, '\n$$$1$$\n');

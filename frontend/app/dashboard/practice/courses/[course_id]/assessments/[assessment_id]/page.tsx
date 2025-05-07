@@ -30,7 +30,7 @@ export default function AssessmentPage() {
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [currentAnswer, setCurrentAnswer] = useState("");
   const [isCheckingWithAI, setIsCheckingWithAI] = useState(false);
-  const [currentQuestionChat, setCurrentQuestionChat] = useState("### Step 3");
+  const [currentQuestionChat, setCurrentQuestionChat] = useState("");
   const [assessmentName, setAssessmentName] = useState("Assessment"); // TODO: Fetch assessment name
   const [isVideosVisible, setIsVideosVisible] = useState(false);
   const [videoSuggestions, setVideoSuggestions] = useState<VideoSuggestion[]>([]);
