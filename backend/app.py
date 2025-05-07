@@ -193,7 +193,7 @@ async def check_with_ai():
         messages=[{
             "role": "system",
             "content": f"""
-                You are an assessment grader. make sure answer is as accurate as possible. be strict. unless in the case of a decimal, then allow for a margin of error in rounding.
+                You are an assessment grader. make sure answer is as accurate as possible. be strict. unless in the case of a decimal, if the answer is correct, but the student rounded incorrectly, still give it a 1.
 
                 (answer/question might be in mathjax format)
                 This is the question: {question["question"]}
@@ -226,7 +226,7 @@ async def check_with_ai():
         messages=[{
             "role": "system",
             "content": f"""
-                You are an assessment grader. make sure answer is as accurate as possible. be strict. unless in the case of a decimal, then allow for a margin of error in rounding.
+                You are an assessment grader. make sure answer is as accurate as possible. be strict. unless in the case of a decimal, if the answer is correct, but the student rounded incorrectly, still give it a 1.
 
                 (answer/question might be in mathjax format)
                 This is the question: {user_input["question"]}
