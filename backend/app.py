@@ -196,12 +196,14 @@ async def check_with_ai():
                 You are an assessment grader. make sure answer is as accurate as possible. be strict. unless in the case of a decimal, if the answer is correct, but the student rounded incorrectly, still give it a 1.
 
                 (answer/question might be in mathjax format)
-                This is the question: {question["question"]}
+                This is the question: {question["question"]["question"]}
                 The answer is the next message
 
                 Provide a numerical response:
                 - 1 if the answer is correct
                 - 0 if the answer is incorrect
+
+                if the answer is incorrect, provide a detailed explanation of why it is incorrect, not how to do it, just why it is incorrect.
 
                 Response format (JSON only):
                 {{
@@ -230,13 +232,13 @@ async def check_with_ai():
 
                 (answer/question might be in mathjax format)
                 This is the question: {user_input["question"]["question"]}
-                This is the answer: {user_input["answer"]["given_answer"]}
+                This is the answer: {user_input["answer"]}
 
                 Provide a numerical response:
                 - 1 if the answer is correct
                 - 0 if the answer is incorrect
 
-                if the answer is incorrect, provide a detailed explanation of why it is incorrect.
+                if the answer is incorrect, provide a detailed explanation of why it is incorrect, not how to do it, just why it is incorrect.
 
                 Response format (JSON only):
                 {{
@@ -248,8 +250,10 @@ async def check_with_ai():
             """
             }],
         )
+        print("--------------------------------")
         print(user_input["question"]["question"])
-        print(user_input["answer"]["given_answer"])
+        print(user_input["answer"])
+        print("--------------------------------")
 
     completion_text = completion.choices[0].message.content
     print(completion_text)
