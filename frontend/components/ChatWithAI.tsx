@@ -101,13 +101,10 @@ export default function ChatWithAI({
     // 1. Ensure $$...$$ is on its own line (for block math)
     text = text.replace(/\$\$([\s\S]*?)\$\$/g, '\n$$$1$$\n');
 
-    // 2. Convert \(...\) to $...$
-    // text = text.replace(/\\\(([\s\S]*?)\\\)/g, '\$$1\$');
-
-    // 3. Convert \[...\] to $$...$$
+    // 2. Convert \[...\] to $$...$$
     text = text.replace(/\\\[([\s\S]*?)\\\]/g, '\n$$$1$$\n');
 
-    // 4. Remove any double $$ at the start or end of a line (if not needed)
+    // 3. Remove any double $$ at the start or end of a line (if not needed)
     text = text.replace(/([^\n])\$\$/g, '$1\n$$');
     text = text.replace(/\$\$([^\n])/g, '$$\n$1');
 

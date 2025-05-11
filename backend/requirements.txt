@@ -6,3 +6,5 @@ supabase
 clerk_backend_api
 asyncio
 pymupdf
+sympy
+requests

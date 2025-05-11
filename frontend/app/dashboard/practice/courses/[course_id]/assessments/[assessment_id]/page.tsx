@@ -1,9 +1,10 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { sendCheckWithAI, getQuestions, getAssessment, getYoutubeVideoSuggestions } from "./actions";
+import { sendCheckWithAI, getQuestions, getAssessment } from "./actions";
 import { useParams } from "next/navigation";
 import { Database } from "@/utils/supabase/database.types";
 import { DropdownMenu, RadioGroup, Button } from "@radix-ui/themes";
+import useSWR from "swr";
 import {
   FiCheck,
   FiChevronDown,
@@ -11,7 +12,6 @@ import {
   FiX,
 } from "react-icons/fi";
 import { FaRedo } from "react-icons/fa";
-
 import { MathJax } from "better-react-mathjax";
 import ChatWithAI from "@/components/ChatWithAI";
 import Image from "next/image";
@@ -36,6 +36,45 @@ export default function AssessmentPage() {
   const [videoSuggestions, setVideoSuggestions] = useState<VideoSuggestion[]>([]);
   const canvasRef = useRef<ReactSketchCanvasRef>(null);
 
+  type Video = {
+    videoRenderer: {
+      thumbnail: {
+        thumbnails: { url: string }[];
+      };
+      videoId: string;
+    };
+  }
+  
+  const { mutate: mutateVideoSuggestions } = useSWR(`${process.env.NODE_ENV == "production" ? process.env.NEXT_PUBLIC_BACKEND_URL : "http://localhost:8000"}/get_youtube_video_suggestions`, {
+    fetcher: async (url: string) => {
+      if(questions && questions.length > 0) {
+        const response = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ question: questions[currentQuestion] }),
+        });
+
+        const data = await response.json();
+        
+        const videoSuggestions = data.contents.twoColumnSearchResultsRenderer.primaryContents.sectionListRenderer.contents[0].itemSectionRenderer.contents.map((video: Video) => {
+          if(video.videoRenderer) {
+            // sometimes video is a short or not a video that we want to use, this filters out those
+            return {
+              thumbnailUrl: video.videoRenderer.thumbnail.thumbnails[0].url,
+              videoId: video.videoRenderer.videoId,
+            };
+          }
+        }).filter((video: VideoSuggestion) => {
+          return video !== undefined;
+        });
+
+        return videoSuggestions.splice(0, 10);
+      }
+    },
+  });
+
   useEffect(() => {
     getAssessment({
       assessmentId: parseInt(params.assessment_id as string),
@@ -51,11 +90,17 @@ export default function AssessmentPage() {
         setCurrentAnswer(data[currentQuestion]?.given_answer || "");
       }
     });
-  }, [currentQuestion, questions?.length]);
+
+    return () => {
+      setCurrentQuestionChat("");
+      setCurrentAnswer("");
+    }
+  }, [questions?.length]);
 
   // this is ran after questions in loaded
   useEffect(() => {
     // if the user has answered the question in the past, set the current answer for that question to the previous answer upon loading the assesment again
+
     if (questions && questions.length > 0) {
       setCurrentAnswer(questions[currentQuestion]?.given_answer || "");
       if (
@@ -69,11 +114,14 @@ export default function AssessmentPage() {
       } else if (questions[currentQuestion]?.question_type === "DRAWING") {
         canvasRef.current?.clearCanvas();
       }
-      getYoutubeVideoSuggestions({
-        question: questions[currentQuestion],
-      }).then((data) => {
-        setVideoSuggestions(data.data);
-      });
+    }
+
+    mutateVideoSuggestions().then((data) => {
+      setVideoSuggestions(data || []);
+    });
+
+    return () => {
+      setCurrentQuestionChat("");
     }
   }, [currentQuestion, questions?.length]);
 
@@ -138,6 +186,39 @@ export default function AssessmentPage() {
       });
     }
   };
+
+  // useEffect(() => {
+  //   if(questions && questions.length > 0) {
+  //     const { data } = useSWR(
+  //       async () => {
+  //         return await getYoutubeVideoSuggestions({
+  //           question: questions[currentQuestion],
+  //         });
+  //       },
+  //       {
+  //         revalidateOnFocus: false,
+  //       }
+  //     );
+  //     setVideoSuggestions(data || []);
+  //   }
+  // }, [currentQuestion, questions?.length]);
+
+  // const { data: videoSuggestionsData, mutate: mutateVideoSuggestions } = useSWR(
+  // async () => {
+  //     console.log("getting video suggestions");
+  //     if(questions && questions.length > 0) {
+  //       const data = await getYoutubeVideoSuggestions({
+  //         question: questions[currentQuestion],
+  //       })
+  //       // setVideoSuggestions(data?.data || []);
+  //     }
+  //   },
+  //   {
+  //     revalidateOnFocus: false,
+  //   }
+  // );
+
+  // setVideoSuggestions(videoSuggestionsData?.data || []);
 
   return (
     <div>

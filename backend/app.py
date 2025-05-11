@@ -14,6 +14,9 @@ from clerk_backend_api.jwks_helpers import AuthenticateRequestOptions
 import os
 import base64
 import fitz
+import subprocess
+import tempfile
+import requests
 
 # Load environment variables
 load_dotenv()
@@ -29,13 +32,13 @@ CORS(server, supports_credentials=True)
 
 @server.route('/')
 def index():
-    request_state = clerk_client.authenticate_request(request, AuthenticateRequestOptions(authorized_parties=["http://frontend:3000", os.environ.get("FRONTEND_URL")]))
+    request_state = clerk_client.authenticate_request(request, AuthenticateRequestOptions(authorized_parties=["http://frontend:3000", "http://localhost:3000", os.environ.get("FRONTEND_URL")]))
     print(request_state)
     return jsonify({ "message": request_state })  # Return response as JSON
 
 @server.route("/generateassessement", methods=["POST"])
 def generate_assessment():
-    request_state = clerk_client.authenticate_request(request, AuthenticateRequestOptions(authorized_parties=["http://frontend:3000", os.environ.get("FRONTEND_URL")]))
+    request_state = clerk_client.authenticate_request(request, AuthenticateRequestOptions(authorized_parties=["http://frontend:3000", "http://localhost:3000", os.environ.get("FRONTEND_URL")]))
     if request_state.is_signed_in != True:
         return jsonify({"message": request_state.reason})
     user_id = request_state.payload.get("sub")
@@ -187,13 +190,11 @@ async def check_with_ai():
         # image is already base64 encoded, so we can just use it
         print(question)
         print(question["question"])
-        completion = chatgpt_client.chat.completions.create(
-        model="gpt-4o",
-        response_format={"type": "json_object"},
-        messages=[{
-            "role": "system",
-            "content": f"""
-                You are an assessment grader. make sure answer is as accurate as possible. be strict. unless in the case of a decimal, if the answer is correct, but the student rounded incorrectly, still give it a 1.
+        messages = [
+            {
+                "role": "system",
+                "content": f"""
+                    You are an assessment grader.
 
                 (answer/question might be in mathjax format)
                 This is the question: {question["question"]["question"]}
@@ -207,32 +208,40 @@ async def check_with_ai():
 
                 Response format (JSON only):
                 {{
-                    "explanation": (string),
-                    "correct": (1 or 0)
+                    "explanation": (string), # explanation of why it is incorrect, not how to do it, just why it is incorrect.
+                    "correct": (1 or 0) # 1 if the answer is correct, 0 if the answer is incorrect
                 }}
 
-                Only return valid JSON. Do not include explanations or extra text, no commas NOTHING litterally just the json.
+                Only return valid JSON. Do not include explanations or extra text, no commas NOTHING literally just the json.
             """
             },
             {
                 "role": "user",
                 "content": [{"type": "image_url", "image_url": {"url": drawing_image}}]
-            }],
+            }
+        ]
+
+        completion_0 = chatgpt_client.chat.completions.create(
+            model="gpt-4.1-mini",
+            response_format={"type": "json_object"},
+            messages=messages
         )
+
+        print("top function ran")
+
     else:
         user_input = request.get_json()
         print(user_input)
-        completion = chatgpt_client.chat.completions.create(
-        model="gpt-4o",
-        response_format={"type": "json_object"},
-        messages=[{
+        messages = [
+            {
             "role": "system",
             "content": f"""
-                You are an assessment grader. make sure answer is as accurate as possible. be strict. unless in the case of a decimal, if the answer is correct, but the student rounded incorrectly, still give it a 1.
+                You are an assessment grader. Return Python code only when needed—i.e., for numeric computations. Do not return code for symbolic or conceptual answers
+                inside the code, NEVER check if the answer is correct or not, just print the calculated output.
 
                 (answer/question might be in mathjax format)
                 This is the question: {user_input["question"]["question"]}
-                This is the answer: {user_input["answer"]}
+                This is the answer given by the user: {user_input["answer"]}
 
                 Provide a numerical response:
                 - 1 if the answer is correct
@@ -242,28 +251,105 @@ async def check_with_ai():
 
                 Response format (JSON only):
                 {{
-                    "correct": (1 or 0),
-                    "explanation": (string)
+                    "code": (string), # python code to check if the answer is correct, if python code is not needed, return ""
+                    "explanation": (string), # explanation of why it is incorrect, not how to do it, just why it is incorrect.
+                    "correct": (1 or 0) # 1 if the answer is correct, 0 if the answer is incorrect
                 }}
 
-                Only return valid JSON. Do not include explanations or extra text, no commas NOTHING litterally just the json.
+                Only return valid JSON. Do not include explanations or extra text, no commas NOTHING literally just the json.
             """
-            }],
+            }
+        ]
+
+        completion_0 = chatgpt_client.chat.completions.create(
+            model="gpt-4.1-mini",
+            response_format={"type": "json_object"},
+            messages=messages
         )
+        print("completion_0 ran")
+
         print("--------------------------------")
         print(user_input["question"]["question"])
         print(user_input["answer"])
         print("--------------------------------")
 
-    completion_text = completion.choices[0].message.content
-    print(completion_text)
-
     try:
-        parsed_response = json.loads(completion_text)  # Ensure the response is in proper JSON format
-    except json.JSONDecodeError:
-        parsed_response = {"error": "Invalid JSON response from AI"}
+        parsed_response_0 = json.loads(completion_0.choices[0].message.content)  # Ensure the response is in proper JSON format
+        if(parsed_response_0["code"] != ""):
+            print(parsed_response_0["code"])
+            print("--------------------------------")
 
-    return jsonify({"correct": parsed_response["correct"]})
+            temp_file = tempfile.NamedTemporaryFile(delete=False)
+            temp_file.write(parsed_response_0["code"].encode("utf-8"))
+            temp_file.flush()
+            result = subprocess.run(["python", temp_file.name], capture_output=True, text=True, timeout=10)
+            print(result.stdout)
+            if(result.stderr != ""):
+                return jsonify({"error": "Error running code"})
+
+            messages.extend([
+                {
+                    "role": "assistant",
+                    "content": parsed_response_0["code"]
+                },
+                {
+                    "role": "system",
+                    "content": f"""
+                You are an assessment grader.
+
+                (answer/question might be in mathjax format)
+                Details:
+                - Question: {user_input["question"]["question"]}
+                - User Answer: {user_input["answer"]}
+                - from code output: {result.stdout}
+
+                Grading Criteria (based on subject):
+
+                For Math:
+                - Prioritize numerical accuracy.
+                - Be lenient with rounding — allow the last decimal place to differ.
+                - example: If the correct answer is 0.906, then 0.905, 0.90, 0.9 or 0.907 is acceptable, but 0.096  is not.
+
+                For Science:    
+                - Prioritize **significant figures**.
+                - example: If the correct answer is 0.906, then 0.905 or 0.907 is acceptable, but 0.096 or 0.90, 0.9 is not.
+                - For incorrect sig figs (e.g., 0.91 instead of 0.910) should result in an incorrect grade.
+
+                For Text-based Subjects (History, English, etc.):
+                - Focus on factual correctness and core ideas.
+                - Varied phrasing is acceptable if the meaning is accurate.
+
+                Instructions:
+                - Provide a **numerical grade**:
+                - `1` if the answer is correct
+                - `0` if the answer is incorrect
+                - If the answer is incorrect, include an explanation of **why** it is incorrect — do not explain how to solve it.
+
+
+                Response format (JSON only):
+                {{
+                    "explanation": (string), # explanation of why it is incorrect, not how to do it, just why it is incorrect.
+                    "correct": (1 or 0) # 1 if the answer is correct, 0 if the answer is incorrect
+                }}
+
+                Only return valid JSON. Do not include explanations or extra text, no commas NOTHING literally just the json.
+                """
+                }
+            ])
+
+            print("------woah------")
+            completion_1 = chatgpt_client.chat.completions.create(
+                model="gpt-4.1-mini",
+                messages=messages,
+            )
+            messages.append(completion_1.choices[0].message.content)
+            print(messages)
+            return jsonify({"correct": json.loads(completion_1.choices[0].message.content)["correct"]})
+        else:
+            return jsonify({"correct": parsed_response_0["correct"]})
+    except json.JSONDecodeError:
+        return jsonify({"error": "Invalid JSON response from AI"})
+
 
 @server.route("/explanation")
 def explain_problem():
@@ -374,6 +460,28 @@ def ask_ai():
         yield "data: [DONE]\n\n"
     
     return Response(response_stream(), mimetype="text/event-stream")
+
+@server.route("/get_youtube_video_suggestions", methods=["POST"])
+def get_youtube_video_suggestions():
+    # youtube blocks client side requests, so we need to make it server side
+    question = request.get_json()
+    response = requests.post("https://www.youtube.com/youtubei/v1/search?prettyPrint=false", json={
+        "context": {
+            "client": {
+                "hl": "en",
+                "gl": "US",
+                "clientName": "WEB",
+                "clientVersion": "2.20250430.01.00",
+                "originalUrl": f"https://www.youtube.com/results?search_query={question['question']['question']} organic chemistry tutor"
+            },
+            "request": {
+                "useSsl": True
+            }
+        },
+        "query": question["question"]["question"] + " organic chemistry tutor"
+    })
+
+    return jsonify(response.json())
 
 if __name__ == "__main__":
     server.run(host="0.0.0.0", port=8000, threaded=True, debug=True)
