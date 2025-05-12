@@ -58,17 +58,16 @@ export default function AssessmentPage() {
 
         const data = await response.json();
         
-        const videoSuggestions = data.contents.twoColumnSearchResultsRenderer.primaryContents.sectionListRenderer.contents[0].itemSectionRenderer.contents.map((video: Video) => {
+        const videoSuggestions = data.contents.twoColumnSearchResultsRenderer.primaryContents.sectionListRenderer.contents[0].itemSectionRenderer.contents.reduce((videoSuggestions: VideoSuggestion[], video: Video) => {
           if(video.videoRenderer) {
             // sometimes video is a short or not a video that we want to use, this filters out those
-            return {
+            return [...videoSuggestions, {
               thumbnailUrl: video.videoRenderer.thumbnail.thumbnails[0].url,
               videoId: video.videoRenderer.videoId,
-            };
+            }];
           }
-        }).filter((video: VideoSuggestion) => {
-          return video !== undefined;
-        });
+          return videoSuggestions;
+        }, []);
 
         return videoSuggestions.splice(0, 10);
       }
