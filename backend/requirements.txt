@@ -3,7 +3,7 @@ openai
 python-dotenv
 flask_cors
 supabase
-clerk_backend_api
+clerk-backend-api==1.8.0
 asyncio
 pymupdf
 sympy

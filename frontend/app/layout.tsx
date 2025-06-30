@@ -5,15 +5,15 @@ import "@radix-ui/themes/styles.css";
 import MathjaxProvider from "@/contexts/MathjaxContext";
 import { Theme } from "@radix-ui/themes";
 import { ThemeProvider } from "@/contexts/ThemeContext";
-import { Poppins } from 'next/font/google';
+import { Poppins } from "next/font/google";
 
 // Import KaTeX CSS
 import "katex/dist/katex.min.css";
 
 const poppins = Poppins({
-  subsets: ['latin'],
-  weight: ['400', '500', '600', '700'],
-  variable: '--font-poppins',
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-poppins",
 });
 
 export const metadata: Metadata = {
