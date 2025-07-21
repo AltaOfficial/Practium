@@ -73,6 +73,9 @@ def generate_assessment():
 
             dont include "ext" anywhere.
 
+            for example `Calculate the heat capacity of a calorimeter if 1.057 g of benzoic acid ( ext{{C}}_7 ext{{H}}_6 ext{{O}}_2) is burned and the temperature increases from 22.75^ ext{{o}}C to 29.00^ ext{{o}}C`
+            those `ext{{}}`'s dont include them in the question.
+
             These are the question types you can choose from:
             
             - Multiple choice: The "question_type" value should be "MCQ".
