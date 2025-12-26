@@ -340,6 +340,6 @@ Built with ❤️ by Jaedon Farr
   Readme created with the help of claude <img width="20" height="20" alt="Claude AI" src="https://github.com/user-attachments/assets/ccb8345f-6f6c-455e-8246-d15297f725fb" style="vertical-align: middle;" />
 </p>
 
-[Portfolio](https://jaedonfarr.vercel.app) • [LinkedIn](https://linkedin.com/in/jaedonfarr) • [GitHub](https://github.com/yourusername)
+[Portfolio](https://jaedonfarr.vercel.app) • [LinkedIn](https://linkedin.com/in/jaedonfarr) • [GitHub](https://github.com/altaofficial)
 
 </div>
