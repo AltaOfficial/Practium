@@ -309,7 +309,7 @@ docker-compose up
 ## 📊 Project Stats
 
 * **Timeline**: 1 month (expected: 2 weeks)
-* **Lines of Code**: ~15,000+
+* **Lines of Code**: ~5,000+
 * **AI API Calls**: ~500 during development
 * **Problems Generated**: 100+ test problems
 * **Final Grade Improvement**: Passed both classes! 🎉
