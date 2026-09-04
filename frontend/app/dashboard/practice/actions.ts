@@ -18,7 +18,7 @@ export async function getCourses() {
   if (userCourses) {
     return { data: userCourses };
   } else {
-    return { error: "Error when fetching courses" };
+    return { error: "Error when fetching courses: " + userCoursesError };
   }
 }
 
