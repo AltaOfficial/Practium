@@ -123,7 +123,8 @@ def generate_assessment():
         })
 
     completion = chatgpt_client.chat.completions.create(
-        model="gpt-5-chat-latest",
+        model="gpt-5.6-luna",
+        reasoning_effort="low",
         response_format={ "type": "json_object" },
         messages=input_messages
     )
@@ -149,6 +150,7 @@ def generate_assessment():
         if len(parsed_assessment["questions"]) < int(num_of_questions):
             completion = chatgpt_client.chat.completions.create(
                 model="gpt-5-chat-latest",
+                reasoning_effort="xhigh",
                 response_format={ "type": "json_object" },
                 messages=input_messages.append({
                     "role": "user",
@@ -225,7 +227,8 @@ async def check_with_ai():
         ]
 
         completion_0 = chatgpt_client.chat.completions.create(
-            model="gpt-5-mini",
+            model="gpt-5.6-luna",
+            reasoning_effort="xhigh",
             response_format={"type": "json_object"},
             messages=messages
         )
@@ -265,7 +268,8 @@ async def check_with_ai():
         ]
 
         completion_0 = chatgpt_client.chat.completions.create(
-            model="gpt-5-mini",
+            model="gpt-5.6-luna",
+            reasoning_effort="xhigh",
             response_format={"type": "json_object"},
             messages=messages
         )
@@ -342,7 +346,8 @@ async def check_with_ai():
 
             print("------woah------")
             completion_1 = chatgpt_client.chat.completions.create(
-                model="gpt-5-mini",
+                model="gpt-5.6-luna",
+                reasoning_effort="xhigh",
                 messages=messages,
             )
             messages.append(completion_1.choices[0].message.content)
@@ -360,7 +365,8 @@ def explain_problem():
 
     def explanation_stream():
         stream = chatgpt_client.chat.completions.create(
-            model="gpt-5-chat-latest",
+            model="gpt-5.6-luna",
+            reasoning_effort="xhigh",
             messages=[
                 {"role": "system", "content": (
                     """You are an AI assistant providing educational explanations.
@@ -390,7 +396,7 @@ def explain_wrong_answer():
 
     def explanation_stream():
         stream = chatgpt_client.chat.completions.create(
-            model="gpt-5-chat-latest",
+            model="gpt-5.6-luna",
             messages=[
                 {"role": "system", "content": (
                     """You are an AI assistant providing educational explanations. Your task is to explain why a given answer to a question is incorrect.
@@ -450,7 +456,7 @@ def ask_ai():
     
     def response_stream():
         stream = chatgpt_client.chat.completions.create(
-            model="gpt-5-chat-latest",
+            model="gpt-5.6-luna",
             messages=messages,
             stream=True
         )
