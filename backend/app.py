@@ -149,7 +149,7 @@ def generate_assessment():
     def check_questions_length():
         if len(parsed_assessment["questions"]) < int(num_of_questions):
             completion = chatgpt_client.chat.completions.create(
-                model="gpt-5-chat-latest",
+                model="gpt-5.6-luna",
                 reasoning_effort="xhigh",
                 response_format={ "type": "json_object" },
                 messages=input_messages.append({
