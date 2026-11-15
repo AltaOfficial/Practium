@@ -17,12 +17,220 @@ import fitz
 import subprocess
 import tempfile
 import requests
+import uuid
+import io
+import hashlib
+from concurrent.futures import ThreadPoolExecutor
+from lxml import etree
+from pptx import Presentation
+from docx import Document
 
 # Load environment variables
 load_dotenv()
 
 # Initialize OpenAI client
 chatgpt_client = OpenAI()
+
+# Model that draws the figures for questions, and the public Supabase storage bucket they are kept in
+IMAGE_MODEL = os.environ.get("OPENAI_IMAGE_MODEL", "gpt-image-2.6-flare")
+QUESTION_IMAGES_BUCKET = "question-images"
+
+# picture formats inside a document that the model can read (others, like emf, are skipped)
+READABLE_IMAGE_TYPES = {"image/png", "image/jpeg", "image/gif", "image/webp"}
+MAX_DOCUMENT_IMAGES = 40
+
+def local_name(node):
+    """The tag of an XML node without its namespace ("" for comments and the like)."""
+    return etree.QName(node).localname if isinstance(node.tag, str) else ""
+
+def xml_text(element):
+    """The text inside a piece of Office XML, including the text of equations."""
+    return "".join(node.text or "" for node in element.iter() if local_name(node) == "t")
+
+def document_pictures(part, seen_pictures):
+    """The pictures a slide or document uses, as message content, without ones already seen (like a logo on every slide)."""
+    pictures = []
+    for relationship in part.rels.values():
+        if relationship.is_external or not relationship.reltype.endswith("/image"):
+            continue
+        picture = relationship.target_part
+        digest = hashlib.sha1(picture.blob).hexdigest()
+        if picture.content_type not in READABLE_IMAGE_TYPES or digest in seen_pictures or len(seen_pictures) >= MAX_DOCUMENT_IMAGES:
+            continue
+        seen_pictures.add(digest)
+        pictures.append({"type": "image_url", "image_url": {"url": f"data:{picture.content_type};base64,{base64.b64encode(picture.blob).decode('ascii')}"}})
+    return pictures
+
+def read_slides(file_bytes):
+    """Returns the text of a PowerPoint file, slide by slide (with speaker notes), and its pictures."""
+    presentation = Presentation(io.BytesIO(file_bytes))
+    text, pictures, seen_pictures = [], [], set()
+    for slide_number, slide in enumerate(presentation.slides, start=1):
+        # every paragraph on the slide, wherever it is: text boxes, tables, grouped shapes
+        lines = [xml_text(paragraph) for paragraph in slide.shapes._spTree.iter() if local_name(paragraph) == "p"]
+        text.append(f"--- Slide {slide_number} ---\n" + "\n".join(line for line in lines if line.strip()))
+        if slide.has_notes_slide and slide.notes_slide.notes_text_frame and slide.notes_slide.notes_text_frame.text.strip():
+            text.append(f"Speaker notes: {slide.notes_slide.notes_text_frame.text.strip()}")
+        pictures.extend(document_pictures(slide.part, seen_pictures))
+    return "\n\n".join(text), pictures
+
+def read_docx(file_bytes):
+    """Returns the text of a Word file, with its tables, in reading order, and its pictures."""
+    document = Document(io.BytesIO(file_bytes))
+    text = []
+    for block in document.element.body.iterchildren():
+        kind = local_name(block)
+        if kind == "p":
+            if xml_text(block).strip():
+                text.append(xml_text(block))
+        elif kind == "tbl":
+            for row in block.iter():
+                if local_name(row) == "tr":
+                    text.append(" | ".join(xml_text(cell).strip() for cell in row if local_name(cell) == "tc"))
+    return "\n".join(text), document_pictures(document.part, set())
+
+def generate_question_image(image_prompt):
+    """Draws the figure for a question and returns its public URL, or None if it could not be made."""
+    try:
+        result = chatgpt_client.images.generate(
+            model=IMAGE_MODEL,
+            prompt=(
+                "A clean, accurate figure for an exam question, in the style of a textbook diagram: "
+                "plain white background, crisp lines, large legible labels, no decoration. "
+                "Draw only what is described, exactly as described. Do not add a title, a caption, "
+                "the question itself, or anything that gives away the answer.\n\n"
+                f"{image_prompt}"
+            ),
+            quality="medium",
+            output_format="webp",
+            output_compression=85,
+        )
+        image_bytes = base64.b64decode(result.data[0].b64_json)
+        path = f"{uuid.uuid4()}.webp"
+        supabase.storage.from_(QUESTION_IMAGES_BUCKET).upload(path, image_bytes, {"content-type": "image/webp"})
+        return supabase.storage.from_(QUESTION_IMAGES_BUCKET).get_public_url(path)
+    except Exception as exception:
+        # a question without its figure is better than no assessment
+        print(f"Could not generate question image: {exception}")
+        return None
+
+class UnreadableFile(Exception):
+    """An uploaded file that could not be opened; the message is shown to the user."""
+
+def files_to_message_content(files):
+    """Turns uploaded files (images, PDFs, slides, Word files) into message content: a list of text parts and a list of images."""
+    images_base64_encoded = []
+    documents_text = [] # the text of uploaded slides and Word files
+    for image in files:
+        if image.filename == "undefined":
+            continue
+
+        file_extension = os.path.splitext(image.filename or "")[1].lower()
+        if file_extension in (".pptx", ".docx"):
+            # slides and Word files are read as their text plus the pictures inside them
+            try:
+                document_text, document_images = (read_slides if file_extension == ".pptx" else read_docx)(image.read())
+            except Exception as exception:
+                print(f"Could not read {image.filename}: {exception}")
+                raise UnreadableFile(f"Could not read {image.filename}. Is it a valid {file_extension} file?")
+            if document_text.strip():
+                documents_text.append({"type": "text", "text": f"Contents of the uploaded file \"{image.filename}\":\n\n{document_text}"})
+            images_base64_encoded.extend(document_images)
+
+        elif image.content_type == "application/pdf":
+            # convert pdf pages into images
+            pdfs_as_imgs = fitz.open(stream=image.read(), filetype="pdf")
+            for page in pdfs_as_imgs:
+                pix = page.get_pixmap(matrix=fitz.Matrix(300/72, 300/72), alpha=False)
+                current_image_base64 = base64.b64encode(pix.tobytes()).decode("ascii")
+                images_base64_encoded.append({"type": "image_url", "image_url": {"url": f"data:image/png;base64,{current_image_base64}"}})
+
+        else:
+            current_image_base64 = base64.b64encode(image.read()).decode("utf-8") # openai api takes in images as base64
+            images_base64_encoded.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{current_image_base64}"}})
+
+    return documents_text, images_base64_encoded
+
+# ---- Class context ----
+# A course carries context the student gives about the class, used whenever the AI works on it:
+# - context_notes: what the student wrote about the class
+# - context_files: files they uploaded (worked solutions, rubrics...), kept as text: the full
+#   "content" and a short "summary" of what it says about how answers must be written
+# - memory: short notes saved from the tutor chat
+MAX_CONTEXT_FILE_CHARACTERS = 20000
+
+def get_course(course_id):
+    """The course row, or None if there is no such course."""
+    try:
+        rows = supabase.table("courses").select("*").eq("id", int(course_id)).execute().data
+        return rows[0] if rows else None
+    except Exception as exception:
+        print(f"Could not load course {course_id}: {exception}")
+        return None
+
+def course_context_text(course, brief=False):
+    """The class context as text for a prompt, or "" if the class has none.
+
+    The full version has the whole text of the uploaded files, for writing questions and solutions.
+    The brief version only has their summaries, for the calls that happen all the time (grading, chat)."""
+    if not course:
+        return ""
+    sections = []
+    if (course.get("context_notes") or "").strip():
+        sections.append("Notes from the student about this class:\n" + course["context_notes"].strip())
+    if course.get("memory"):
+        sections.append("Things to remember about this class:\n" + "\n".join(f"- {memory}" for memory in course["memory"]))
+    for context_file in course.get("context_files") or []:
+        if brief:
+            if (context_file.get("summary") or "").strip():
+                sections.append(f"From the class material \"{context_file.get('name')}\":\n{context_file['summary'].strip()}")
+        elif (context_file.get("content") or "").strip():
+            sections.append(f"Class material \"{context_file.get('name')}\":\n{context_file['content'].strip()}")
+    return "\n\n".join(sections)
+
+def class_expectations_for_grading(course_id):
+    """The part of a grading prompt that holds the class's expectations, or "" if there are none."""
+    class_context = course_context_text(get_course(course_id), brief=True) if course_id else ""
+    if not class_context:
+        return ""
+    return f"""
+                This question is from a class with its own expectations for how answers are written:
+                <class_context>
+                {class_context}
+                </class_context>
+                These expectations are part of the grading of a written or drawn answer: an answer that reaches the right result but is not written the way the class requires (for example it leaves out the explanation of its steps that the class asks for) is incorrect, and the feedback should say what is missing.
+                They do not apply when the answer is just picking a choice in a multiple choice or true/false question.
+    """
+
+def add_course_memory(course_id, memory):
+    """Adds a note to the memory of a class. Returns what to tell the model that asked for it."""
+    memory = (memory or "").strip()
+    course = get_course(course_id)
+    if not course or not memory:
+        return "Could not save this."
+    memories = course.get("memory") or []
+    if memory not in memories:
+        supabase.table("courses").update({"memory": [*memories, memory]}).eq("id", course["id"]).execute()
+    return "Saved to the class memory."
+
+# lets the tutor chat save something the student says about their class
+REMEMBER_FOR_CLASS_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "remember_for_class",
+        "description": "Save a lasting fact about the student's class to the class memory, so it is used for every future question, test and grading in this class.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "memory": {
+                    "type": "string",
+                    "description": "One short note that makes sense on its own, for example: \"The professor wants every limit answer to name the dominant term and justify each step in words.\"",
+                },
+            },
+            "required": ["memory"],
+        },
+    },
+}
 
 # Initialize Clerk client
 clerk_client = Clerk(os.environ.get("CLERK_SECRET_KEY"))
@@ -52,27 +260,31 @@ def generate_assessment():
     print(form_images)
     text_input = request.form.get("content", "") # Get textInput from formData
     
-    images_base64_encoded = []
-    for image in form_images:
-        if image.filename == "undefined":
-            continue
+    try:
+        documents_text, images_base64_encoded = files_to_message_content(form_images)
+    except UnreadableFile as exception:
+        return jsonify({"error": str(exception)}), 400
 
-        if image.content_type == "application/pdf":
-            # convert pdf pages into images
-            pdfs_as_imgs = fitz.open(stream=image.read(), filetype="pdf")
-            for page in pdfs_as_imgs:
-                pix = page.get_pixmap(matrix=fitz.Matrix(300/72, 300/72), alpha=False)
-                current_image_base64 = base64.b64encode(pix.tobytes()).decode("ascii")
-                images_base64_encoded.append({"type": "image_url", "image_url": {"url": f"data:image/png;base64,{current_image_base64}"}})
+    # what the student has told us about the class this assessment is for
+    class_context = course_context_text(get_course(request.form.get("courseId")))
+    class_context_instruction = ""
+    if class_context:
+        class_context_instruction = f"""
+            **Class context:**
+            This assessment is for a class. Below, between the <class_context> tags, is what the student has provided about it: notes on how the professor wants things done, things to remember, and example material such as worked solutions. Follow it.
+            - Write the questions the way this class's work is written: the same style, notation, and level of difficulty.
+            - If the class expects answers to be written a certain way (for example every step explained and justified in words, a required structure, units or rounding rules), build that into the questions: use "LATEX" questions (a written answer) instead of "MCQ" or "BOOL" wherever the expectation applies, and say in the question what a full answer must include. The answers are graded against these expectations, so an answer that skips them is marked incorrect.
+            - The class context is about how to write and answer questions. The topics of the questions still come from the input.
 
-        else:
-            current_image_base64 = base64.b64encode(image.read()).decode("utf-8") # openai api takes in images as base64
-            images_base64_encoded.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{current_image_base64}"}})
-
+            <class_context>
+            {class_context}
+            </class_context>
+            """
 
     input_messages = [{
             "role": "system",
             "content": f"""Create question(s) based on the image(s) and text input.
+            {class_context_instruction}
 
             If an image is uploaded, dont reference it in the questions in any way. Create questions that are very similiar to the ones in the image, but dont be exactly the same.
 
@@ -100,6 +312,14 @@ def generate_assessment():
                 - `"parts"` (array of 2 or more objects): each part is shaped like a normal question object ("question", "question_type", and "answers" when needed). Later parts can build on earlier ones.
             - Dont put labels like "(a)" or "Part b" in the text of a part, and dont repeat the context inside the parts.
 
+            **Images in questions:**
+            - A question can come with a figure, which an image generator draws from a description you write. To give a question a figure, add `"image_prompt"` (string) to the question object. For a multi-part question, put it on the multi-part object next to "context" (not on the parts); the figure is then shown with the context for every part.
+            - Only add a figure when it really helps: a geometry figure, a graph or plot, a free body diagram, a circuit, a molecule or structure, a labelled diagram, a map, an experimental setup. If the problem in the input comes with a figure, the question you create from it should have one too. Most questions need no figure; leave "image_prompt" out for those.
+            - The description must stand on its own: the image generator sees nothing but it. Say exactly what to draw, with every shape, axis, scale, label, value and unit, and where each one goes. Write labels as plain text (no MathJax).
+            - The figure must agree with the question. Image generators are imprecise, so also state in the question text every value needed to answer it; dont make the student read exact numbers off the figure.
+            - The figure must never show or give away the answer.
+            - The question text can refer to the figure ("in the figure", "the circuit shown").
+
             **MathJax Usage:**
             - Apply MathJax **to questions and answers wherever beneficial**, including MCQ and BOOL questions.  
             - Use \\(...\\) for inline math (e.g., "Solve for \\(x\\) in \\(2x + 3 = 7\\).").  
@@ -116,9 +336,11 @@ def generate_assessment():
                 - `"question"` (string, using MathJax when beneficial)
                 - `"question_type"` (string, either `"MCQ"`, `"BOOL"`, or `"LATEX"`)
                 - If `"question_type"` is `"MCQ"` or `"BOOL"`, it must include `"answers"` (array of strings, using MathJax where beneficial).
+                - Optionally `"image_prompt"` (string), only when the question needs a figure.
             - A multi-part question must have:
                 - `"context"` (string, using MathJax when beneficial)
                 - `"parts"` (array of single question objects)
+                - Optionally `"image_prompt"` (string), only when the question needs a figure.
 
             **Response Format:**  
             - Return a **valid JSON object**.  
@@ -126,20 +348,15 @@ def generate_assessment():
             """
         }]
 
-    if(len(images_base64_encoded) > 0 and text_input):
+    user_content = [
+        *([{"type": "text", "text": text_input}] if text_input else []),
+        *documents_text,
+        *images_base64_encoded,
+    ]
+    if user_content:
         input_messages.append({
             "role": "user",
-            "content": [{"type": "text", "text": text_input}, *images_base64_encoded]
-        })
-    elif(len(images_base64_encoded) > 0 and not text_input):
-        input_messages.append({
-            "role": "user",
-            "content": [*images_base64_encoded]
-        })
-    elif(text_input and not len(images_base64_encoded) > 0):
-        input_messages.append({
-            "role": "user",
-            "content": [{"type": "text", "text": text_input}]
+            "content": user_content
         })
 
     completion = chatgpt_client.chat.completions.create(
@@ -196,7 +413,25 @@ def generate_assessment():
             row["answers"] = question["answers"]
         return row
 
-    # each part of a multi-part question is its own row; the parts share a group_number and context
+    # draw the figures of the questions that have one, all at the same time
+    def image_prompt_of(question):
+        image_prompt = question.get("image_prompt")
+        return image_prompt.strip() if isinstance(image_prompt, str) else ""
+
+    questions_with_image = [question for question in parsed_assessment["questions"] if image_prompt_of(question)]
+    image_urls = {}
+    if questions_with_image:
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            urls = executor.map(generate_question_image, [image_prompt_of(question) for question in questions_with_image])
+            image_urls = {id(question): url for question, url in zip(questions_with_image, urls) if url}
+
+    # image_description is what the figure shows, so the grader and the tutor chat know about it too
+    def image_columns(question):
+        if id(question) not in image_urls:
+            return {}
+        return {"image_url": image_urls[id(question)], "image_description": image_prompt_of(question)}
+
+    # each part of a multi-part question is its own row; the parts share a group_number, context and figure
     has_multi_part = False
     for group_number, question in enumerate(parsed_assessment["questions"], start=1):
         if question.get("parts"):
@@ -206,15 +441,21 @@ def generate_assessment():
                     **question_row(part),
                     "group_number": group_number,
                     "context": question.get("context", ""),
+                    **image_columns(question),
                 })
         else:
-            questions.append(question_row(question))
+            questions.append({**question_row(question), **image_columns(question)})
 
+    # rows inserted together need the same keys
     if has_multi_part:
-        # rows inserted together need the same keys
         for row in questions:
             row.setdefault("group_number", None)
             row.setdefault("context", None)
+            row.setdefault("answers", None)
+    if image_urls:
+        for row in questions:
+            row.setdefault("image_url", None)
+            row.setdefault("image_description", None)
             row.setdefault("answers", None)
 
     supabase.table("questions").insert(questions).execute()
@@ -229,6 +470,8 @@ async def check_with_ai():
     if request.form:
         question = json.loads(request.form.get("question"))
         drawing_image = request.form.get("answer")
+        # how the class the question belongs to wants answers written
+        class_expectations = class_expectations_for_grading(request.form.get("course_id"))
         # image is already base64 encoded, so we can just use it
         print(question)
         print(question["question"])
@@ -248,8 +491,9 @@ async def check_with_ai():
                 This is the question: {question["question"]}
                 {answer_choices}
                 The answer is the next message: an image of what the student drew or handwrote on a whiteboard.
-                It may include their working; grade the final answer it shows.
+                It may include their working; grade the final answer it shows (and how it is written, if the class below has expectations for that).
 
+                {class_expectations}
                 Provide a numerical response:
                 - 1 if the answer is correct
                 - 0 if the answer is incorrect
@@ -284,6 +528,8 @@ async def check_with_ai():
     else:
         user_input = request.get_json()
         print(user_input)
+        # how the class the question belongs to wants answers written
+        class_expectations = class_expectations_for_grading(user_input.get("course_id"))
         messages = [
             {
             "role": "system",
@@ -295,6 +541,7 @@ async def check_with_ai():
                 This is the question: {user_input["question"]["question"]}
                 This is the answer given by the user: {user_input["answer"]}
 
+                {class_expectations}
                 Provide a numerical response:
                 - 1 if the answer is correct
                 - 0 if the answer is incorrect
@@ -372,7 +619,7 @@ async def check_with_ai():
                 For Text-based Subjects (History, English, etc.):
                 - Focus on factual correctness and core ideas.
                 - Varied phrasing is acceptable if the meaning is accurate.
-
+                {class_expectations}
                 Instructions:
                 - Provide a **numerical grade**:
                 - `1` if the answer is correct

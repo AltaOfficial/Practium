@@ -95,12 +95,13 @@ function isPenEraser(event: PointerEvent) {
   return event.pointerType === "pen" && (event.buttons & (32 | 2)) !== 0;
 }
 
-// The same for a stylus hovering above the board. Any held button counts:
-// nothing is touching, so it can only be a button on the pen. Chrome on
-// Android reports the Samsung S Pen's side button as the primary button (1),
-// and only while hovering; once the pen touches, the button isn't reported.
-function isHoveringPenEraser(event: PointerEvent) {
-  return event.pointerType === "pen" && (event.buttons & (32 | 2 | 1)) !== 0;
+// A hovering stylus reporting the primary button (1). Nothing is touching, so
+// it can only be a button on the pen: this is how Chrome on Android reports
+// the Samsung S Pen's side button. Chrome keeps every touch made while that
+// button is held for itself (it selects text with it), so the button can't
+// be held to erase; a press of it switches between the pen and the eraser.
+function isHoveringPenClick(event: PointerEvent) {
+  return event.pointerType === "pen" && (event.buttons & 1) !== 0;
 }
 
 // A copy of a pointer event that can be dispatched again.
@@ -153,6 +154,8 @@ const DrawingBoard = forwardRef<DrawingBoardRef, DrawingBoardProps>(
     // the eraser was switched on by a hovering pen, which is also what
     // switches it off again (the button can't be seen while the pen is down)
     const eraseFromHover = useRef(false);
+    // whether the hovering pen's button was held at the last hover event
+    const hoverClickHeld = useRef(false);
     const erasing = tool === "eraser" || penErasing;
 
     const notify = () => {
@@ -286,8 +289,8 @@ const DrawingBoard = forwardRef<DrawingBoardRef, DrawingBoardProps>(
       <div
         className={
           isFullscreen
-            ? "fixed inset-0 z-50 bg-white p-4 flex flex-col gap-3"
-            : "flex flex-col gap-3"
+            ? "fixed inset-0 z-50 bg-white p-4 flex flex-col gap-3 select-none"
+            : "flex flex-col gap-3 select-none"
         }
       >
         {isFullscreen && fullscreenHeader && (
@@ -412,8 +415,16 @@ const DrawingBoard = forwardRef<DrawingBoardRef, DrawingBoardProps>(
               if (!erasing && isPenEraser(native)) startPenErase(native, true);
               return;
             }
-            // hovering: be erasing (or not) before the pen lands
-            const held = isHoveringPenEraser(native);
+            // hovering: a press of the S Pen's button switches pen <-> eraser
+            const clickHeld = isHoveringPenClick(native);
+            if (clickHeld !== hoverClickHeld.current) {
+              hoverClickHeld.current = clickHeld;
+              if (clickHeld) {
+                setTool((current) => (current === "eraser" ? "pen" : "eraser"));
+              }
+            }
+            // other pens: be erasing (or not) before the pen lands
+            const held = isPenEraser(native);
             if (held !== eraseFromHover.current || held !== penErasing) {
               eraseFromHover.current = held;
               setPenErasing(held);

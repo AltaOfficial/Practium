@@ -106,13 +106,15 @@ export default function GenerateTestPage() {
               <p className="text-gray-600 mb-1">
                 Drop files here or click to upload
               </p>
-              <p className="text-sm text-gray-500">Supports images and PDFs</p>
+              <p className="text-sm text-gray-500">
+                Supports images, PDFs, slides (.pptx) and Word documents (.docx)
+              </p>
               <input
                 ref={hiddenFilesInput}
                 type="file"
                 name="uploadedFiles"
                 multiple
-                accept="image/*,.pdf"
+                accept="image/*,.pdf,.pptx,.docx"
                 onChange={(e) => {
                   handleFileUpload(e.target.files);
                 }}

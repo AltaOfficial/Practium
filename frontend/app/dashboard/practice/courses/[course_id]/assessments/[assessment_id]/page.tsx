@@ -92,16 +92,29 @@ function describeAnswer(question: Question) {
   }`;
 }
 
+// A question can come with a figure. The grader and the tutor can't see it,
+// so they are told what it shows.
+const describeFigure = (question: Question) =>
+  question.image_url && question.image_description
+    ? `\n\nThe question comes with a figure. It shows: ${question.image_description}`
+    : "";
+
+// A standalone question with its figure, if it has one.
+const questionWithFigure = (question: Question) =>
+  `${question.question || ""}${describeFigure(question)}`;
+
 // What the student is looking at, for follow-up messages in the chat: the
 // question (every part of it, for a multi-part question) and their answers.
 function buildChatContext(parts: Question[], partIndex: number) {
   if (parts[partIndex].group_number == null) {
-    return `Question: ${parts[partIndex].question}\n${describeAnswer(
+    return `Question: ${questionWithFigure(parts[partIndex])}\n${describeAnswer(
       parts[partIndex]
     )}`;
   }
   return [
-    `Shared context:\n${parts[partIndex].context || ""}`,
+    `Shared context:\n${parts[partIndex].context || ""}${describeFigure(
+      parts[partIndex]
+    )}`,
     ...parts.map(
       (part, index) =>
         `Part (${partLabel(index)}): ${part.question}\n${describeAnswer(part)}`
@@ -120,7 +133,9 @@ function buildPartPrompt(parts: Question[], partIndex: number) {
 
   return [
     `This is one part of a multi-part question.`,
-    `Shared context:\n${parts[partIndex].context || ""}`,
+    `Shared context:\n${parts[partIndex].context || ""}${describeFigure(
+      parts[partIndex]
+    )}`,
     ...(earlierParts.length > 0
       ? [`Earlier parts:\n\n${earlierParts.join("\n\n")}`]
       : []),
@@ -268,9 +283,12 @@ export default function AssessmentPage() {
       question,
       answer,
       canvasPath: usingBoard ? currentAnswer : undefined,
-      // parts are graded with the shared context and the earlier parts
+      // parts are graded with the shared context and the earlier parts,
+      // and a question with a figure with what the figure shows
       questionText: isMultiPart
         ? buildPartPrompt(currentParts, currentPart)
+        : describeFigure(question)
+        ? questionWithFigure(question)
         : undefined,
     }).then(
       (data) => {
@@ -308,7 +326,7 @@ export default function AssessmentPage() {
     // for a part, send the shared context and the earlier parts with their answers too
     const problem = isMultiPart
       ? buildPartPrompt(currentParts, currentPart)
-      : currentQuestionData.question || "";
+      : questionWithFigure(currentQuestionData);
     if (isMultiPart) {
       // the chat spans all parts, so label which part this explanation is for
       setCurrentQuestionChat(
@@ -318,6 +336,9 @@ export default function AssessmentPage() {
           `How do I solve part (${partLabel(currentPart)})?` +
           USER_END
       );
+    } else {
+      // its own message, even right after another one from the assistant
+      setCurrentQuestionChat((prev) => prev + ASSISTANT_BREAK);
     }
     const eventStream = new EventSource(
       `${process.env.NODE_ENV == "production" ? process.env.NEXT_PUBLIC_BACKEND_URL : "http://localhost:8000"}/explanation?problem=${encodeURIComponent(
@@ -344,6 +365,18 @@ export default function AssessmentPage() {
 
   const isAnswered = currentQuestionData?.is_answered;
   const isCorrect = currentQuestionData?.is_correct;
+
+  // the question's figure; the parts of a multi-part question share one, shown with their context
+  const questionFigure = (className: string) =>
+    currentQuestionData?.image_url ? (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        key={currentQuestionData.image_url}
+        src={currentQuestionData.image_url}
+        alt={currentQuestionData.image_description || "Figure for the question"}
+        className={`block w-auto max-w-full rounded-md border border-gray-200 bg-white ${className}`}
+      />
+    ) : null;
 
   const handleCheckAnswer = () => {
     if (!currentQuestionData || !currentAnswer) return;
@@ -539,6 +572,7 @@ export default function AssessmentPage() {
                       <MathJax inline dynamic className="text-[#333333]">
                         {currentQuestionData.context}
                       </MathJax>
+                      {questionFigure("mt-4 max-h-80")}
                     </div>
 
                     {/* Part switcher */}
@@ -579,6 +613,7 @@ export default function AssessmentPage() {
                   <MathJax inline dynamic className="text-[#333333]">
                     {currentQuestionData.question}
                   </MathJax>
+                  {!isMultiPart && questionFigure("mt-4 max-h-80")}
                 </div>
 
                 <div className="space-y-4">
@@ -651,6 +686,7 @@ export default function AssessmentPage() {
                           <MathJax inline dynamic>
                             {currentQuestionData.question}
                           </MathJax>
+                          {questionFigure("mt-2 max-h-48")}
                         </>
                       }
                     />

@@ -6,5 +6,7 @@ supabase
 clerk-backend-api==1.8.0
 asyncio
 pymupdf
+python-pptx
+python-docx
 sympy
 requests
