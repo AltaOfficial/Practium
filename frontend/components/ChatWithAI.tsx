@@ -141,7 +141,7 @@ export default function ChatWithAI({
                   className="self-start w-full bg-gray-100 rounded-lg px-4 py-3 leading-relaxed overflow-x-auto"
                 >
                   <ReactMarkdown
-                    remarkPlugins={[remarkMath]}
+                    remarkPlugins={[remarkGfm, remarkMath]}
                     rehypePlugins={[rehypeKatex]}
                     components={{
                       p: ({ children }) => <p className="my-3 first:mt-0 last:mb-0">{children}</p>,
@@ -149,6 +149,17 @@ export default function ChatWithAI({
                       ol: ({ children }) => <ol className="list-decimal pl-6 my-3 space-y-1">{children}</ol>,
                       strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
                       hr: () => <hr className="my-4 border-t border-gray-300" />,
+                      table: ({ children }) => (
+                        <div className="my-3 overflow-x-auto">
+                          <table className="border-collapse text-sm">{children}</table>
+                        </div>
+                      ),
+                      th: ({ children, style }) => (
+                        <th style={style} className="border border-gray-300 bg-gray-200 px-3 py-1.5 font-semibold">{children}</th>
+                      ),
+                      td: ({ children, style }) => (
+                        <td style={style} className="border border-gray-300 px-3 py-1.5">{children}</td>
+                      ),
                       h1: ({ children }) => <h1 className="text-xl font-semibold mt-5 mb-3 first:mt-0">{children}</h1>,
                       h2: ({ children }) => <h2 className="text-lg font-semibold mt-5 mb-3 first:mt-0">{children}</h2>,
                       h3: ({ children }) => <h3 className="text-base font-semibold mt-4 mb-2 first:mt-0">{children}</h3>,
