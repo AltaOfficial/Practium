@@ -232,6 +232,12 @@ async def check_with_ai():
         # image is already base64 encoded, so we can just use it
         print(question)
         print(question["question"])
+        # any question type can be answered with a drawing, so give the grader the choices too
+        answer_choices = ""
+        if question.get("question_type") == "MCQ" and question.get("answers"):
+            answer_choices = "The answer choices are: " + json.dumps(question["answers"])
+        elif question.get("question_type") == "BOOL":
+            answer_choices = "This is a true or false question."
         messages = [
             {
                 "role": "system",
@@ -239,8 +245,10 @@ async def check_with_ai():
                     You are an assessment grader.
 
                 (answer/question might be in mathjax format)
-                This is the question: {question["question"]["question"]}
-                The answer is the next message
+                This is the question: {question["question"]}
+                {answer_choices}
+                The answer is the next message: an image of what the student drew or handwrote on a whiteboard.
+                It may include their working; grade the final answer it shows.
 
                 Provide a numerical response:
                 - 1 if the answer is correct
@@ -319,7 +327,7 @@ async def check_with_ai():
 
     try:
         parsed_response_0 = json.loads(completion_0.choices[0].message.content)  # Ensure the response is in proper JSON format
-        if(parsed_response_0["code"] != ""):
+        if parsed_response_0.get("code"):
             print(parsed_response_0["code"])
             print("--------------------------------")
 

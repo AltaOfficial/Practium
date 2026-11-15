@@ -44,6 +44,8 @@ export async function sendCheckWithAI({
 }: {
   question: Question;
   answer: string;
+  // the board's paths, when the answer is a drawing (of any question type);
+  // answer is then an image of it
   canvasPath?: string;
   // full problem text to grade against, when it is more than question.question (parts of a multi-part question)
   questionText?: string;
@@ -58,7 +60,7 @@ export async function sendCheckWithAI({
   }
 
   let res;
-  if (question.question_type === "DRAWING") {
+  if (canvasPath) {
     const formData = new FormData();
     formData.append("question", JSON.stringify(question));
     formData.append("answer", answer);
@@ -103,7 +105,7 @@ export async function sendCheckWithAI({
     .update({
       is_answered: true,
       is_correct: res.correct,
-      given_answer: question.question_type === "DRAWING" ? canvasPath : answer,
+      given_answer: canvasPath || answer,
     })
     .eq("id", questionId);
 

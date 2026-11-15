@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { sendCheckWithAI, getQuestions, getAssessment } from "./actions";
 import { useParams } from "next/navigation";
 import { Database } from "@/utils/supabase/database.types";
-import { DropdownMenu, RadioGroup, Button } from "@radix-ui/themes";
+import { DropdownMenu, RadioGroup, Button, Tooltip } from "@radix-ui/themes";
 import useSWR from "swr";
 import {
   FiCheck,
@@ -11,7 +11,13 @@ import {
   FiChevronRight,
   FiX,
 } from "react-icons/fi";
-import { FaRedo } from "react-icons/fa";
+import {
+  FaKeyboard,
+  FaListUl,
+  FaPen,
+  FaRedo,
+  FaRegLightbulb,
+} from "react-icons/fa";
 import { MathJax } from "better-react-mathjax";
 import ChatWithAI, {
   parseStreamChunk,
@@ -19,7 +25,7 @@ import ChatWithAI, {
   USER_END,
 } from "@/components/ChatWithAI";
 import Image from "next/image";
-import { ReactSketchCanvas, ReactSketchCanvasRef } from "react-sketch-canvas";
+import DrawingBoard, { DrawingBoardRef } from "@/components/DrawingBoard";
 
 type Question = Database["public"]["Tables"]["questions"]["Row"];
 
@@ -48,11 +54,29 @@ function groupQuestions(questions: Question[] = []): Question[][] {
 
 const partLabel = (index: number) => String.fromCharCode(97 + index);
 
+// Any question can be answered on the drawing board, in which case its
+// given_answer holds the board's paths as JSON rather than a typed answer.
+function parseDrawing(answer: string | null) {
+  if (!answer?.startsWith("[{")) return null;
+  try {
+    const paths = JSON.parse(answer);
+    return Array.isArray(paths) && Array.isArray(paths[0]?.paths)
+      ? paths
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+const isDrawnAnswer = (question: Question) =>
+  question.question_type === "DRAWING" ||
+  parseDrawing(question.given_answer) !== null;
+
 // The full problem for one part: the shared context, the earlier parts with
 // the student's answers, then the part itself.
 function describeAnswer(question: Question) {
   const answer =
-    question.question_type === "DRAWING"
+    isDrawnAnswer(question)
       ? question.given_answer
         ? "(answered with a drawing)"
         : ""
@@ -117,7 +141,9 @@ export default function AssessmentPage() {
   const [assessmentName, setAssessmentName] = useState("Assessment"); // TODO: Fetch assessment name
   const [isVideosVisible, setIsVideosVisible] = useState(false);
   const [videoSuggestions, setVideoSuggestions] = useState<VideoSuggestion[]>([]);
-  const canvasRef = useRef<ReactSketchCanvasRef>(null);
+  const boardRef = useRef<DrawingBoardRef>(null);
+  // whether the current question is being answered on the drawing board
+  const [usingBoard, setUsingBoard] = useState(false);
 
   const questionGroups = useMemo(() => groupQuestions(questions), [questions]);
   const currentParts = questionGroups[currentQuestion] || [];
@@ -193,23 +219,34 @@ export default function AssessmentPage() {
 
     if (currentQuestionData) {
       setCurrentAnswer(currentQuestionData.given_answer || "");
-      if (
-        currentQuestionData.question_type === "DRAWING" &&
-        currentQuestionData.given_answer
-      ) {
-        canvasRef.current?.clearCanvas();
-        canvasRef.current?.loadPaths(
-          JSON.parse(currentQuestionData.given_answer)
-        );
-      } else if (currentQuestionData.question_type === "DRAWING") {
-        canvasRef.current?.clearCanvas();
-      }
+      setUsingBoard(isDrawnAnswer(currentQuestionData));
     }
 
     mutateVideoSuggestions().then((data) => {
       setVideoSuggestions(data || []);
     });
   }, [currentQuestion, currentPart, questions?.length]);
+
+  // put the saved drawing on the board whenever it shows a different question
+  useEffect(() => {
+    if (usingBoard && currentQuestionData) {
+      boardRef.current?.load(
+        parseDrawing(currentQuestionData.given_answer) || []
+      );
+    }
+  }, [usingBoard, currentQuestion, currentPart, questions?.length]);
+
+  // sets the answer of the current question
+  const setAnswer = (value: string) => {
+    setCurrentAnswer(value);
+    setQuestions(
+      questions?.map((questionItem) =>
+        questionItem.id == currentQuestionData?.id
+          ? { ...questionItem, given_answer: value }
+          : questionItem
+      )
+    );
+  };
 
   // the chat is shared by all parts of a question, so it only resets when the question changes
   useEffect(() => {
@@ -229,7 +266,7 @@ export default function AssessmentPage() {
     sendCheckWithAI({
       question,
       answer,
-      canvasPath: currentAnswer,
+      canvasPath: usingBoard ? currentAnswer : undefined,
       // parts are graded with the shared context and the earlier parts
       questionText: isMultiPart
         ? buildPartPrompt(currentParts, currentPart)
@@ -237,6 +274,7 @@ export default function AssessmentPage() {
     }).then(
       (data) => {
         if (data.error) {
+          setIsCheckingWithAI(false);
           return console.error(data.error);
         }
       setQuestions(
@@ -255,14 +293,54 @@ export default function AssessmentPage() {
     });
   }
 
+  // streams an explanation of the current question into the chat
+  const explainQuestion = () => {
+    if (!currentQuestionData) return;
+    // for a part, send the shared context and the earlier parts with their answers too
+    const problem = isMultiPart
+      ? buildPartPrompt(currentParts, currentPart)
+      : currentQuestionData.question || "";
+    if (isMultiPart) {
+      // the chat spans all parts, so label which part this explanation is for
+      setCurrentQuestionChat(
+        (prev) =>
+          prev +
+          USER_START +
+          `How do I solve part (${partLabel(currentPart)})?` +
+          USER_END
+      );
+    }
+    const eventStream = new EventSource(
+      `${process.env.NODE_ENV == "production" ? process.env.NEXT_PUBLIC_BACKEND_URL : "http://localhost:8000"}/explanation?problem=${encodeURIComponent(
+        problem
+      )}`
+    );
+    eventStream.onmessage = (e) => {
+      if (e.data === "[DONE]") {
+        eventStream.close();
+        return;
+      }
+      // Chunks are JSON-encoded so newlines survive the event stream
+      const chunk = parseStreamChunk(e.data);
+      setCurrentQuestionChat((prev) => prev + chunk);
+    };
+    eventStream.onerror = (e) => {
+      console.error(e);
+      eventStream.close();
+    };
+  };
+
+  const iconButton =
+    "!bg-transparent w-9 h-9 flex items-center justify-center outline-none !border-2 !border-[#333333] text-[#333333] rounded-[4px] disabled:opacity-40";
+
   const isAnswered = currentQuestionData?.is_answered;
   const isCorrect = currentQuestionData?.is_correct;
 
   const handleCheckAnswer = () => {
     if (!currentQuestionData || !currentAnswer) return;
 
-    if (currentQuestionData.question_type === "DRAWING") {
-      canvasRef.current?.exportImage("jpeg").then((data) => {
+    if (usingBoard) {
+      boardRef.current?.exportImage().then((data) => {
         checkWithAI({
           question: currentQuestionData,
           answer: data,
@@ -368,13 +446,58 @@ export default function AssessmentPage() {
                     </DropdownMenu.Content>
                   </DropdownMenu.Root>
 
-                  <button
-                    onClick={() => goToQuestion(currentQuestion + 1)}
-                    className="!bg-transparent flex items-center outline-none px-3 py-1.5 !border-2 !border-[#333333] text-[#333333] text-sm rounded-[4px] font-medium"
-                  >
-                    <FaRedo size={20} className="mr-2" />
-                    Get a similar question
-                  </button>
+                  <Tooltip content="Get a similar question">
+                    <button
+                      aria-label="Get a similar question"
+                      onClick={() => goToQuestion(currentQuestion + 1)}
+                      className={iconButton}
+                    >
+                      <FaRedo size={16} />
+                    </button>
+                  </Tooltip>
+
+                  {/* a drawing question is always answered on the board */}
+                  {currentQuestionData?.question_type !== "DRAWING" && (
+                    <Tooltip
+                      content={
+                        usingBoard
+                          ? currentQuestionData?.question_type === "LATEX"
+                            ? "Type my answer instead"
+                            : "Pick from the choices instead"
+                          : "Answer on the drawing board"
+                      }
+                    >
+                      <button
+                        aria-label="Switch between the drawing board and the regular answer"
+                        disabled={!currentQuestionData}
+                        onClick={() => {
+                          // a typed answer and a drawing can't stand in for each other
+                          setAnswer("");
+                          setUsingBoard(!usingBoard);
+                        }}
+                        className={iconButton}
+                      >
+                        {!usingBoard ? (
+                          <FaPen size={15} />
+                        ) : currentQuestionData?.question_type === "LATEX" ? (
+                          <FaKeyboard size={17} />
+                        ) : (
+                          <FaListUl size={16} />
+                        )}
+                      </button>
+                    </Tooltip>
+                  )}
+
+                  <Tooltip content="How do I solve this?">
+                    <button
+                      aria-label="How do I solve this?"
+                      disabled={!currentQuestionData}
+                      onClick={explainQuestion}
+                      className={iconButton}
+                    >
+                      <FaRegLightbulb size={17} />
+                    </button>
+                  </Tooltip>
                 </div>
 
                 <button
@@ -450,7 +573,19 @@ export default function AssessmentPage() {
                 </div>
 
                 <div className="space-y-4">
-                  {currentQuestionData.question_type === "MCQ" && (
+                  {usingBoard &&
+                    currentQuestionData.question_type === "MCQ" &&
+                    currentQuestionData.answers && (
+                      <MathJax dynamic className="text-[#333333] text-sm">
+                        <ul className="list-disc pl-5 space-y-1">
+                          {currentQuestionData.answers.map((answer, index) => (
+                            <li key={index}>{answer}</li>
+                          ))}
+                        </ul>
+                      </MathJax>
+                    )}
+
+                  {!usingBoard && currentQuestionData.question_type === "MCQ" && (
                     <RadioGroup.Root
                       value={currentAnswer}
                       onValueChange={(value) => {
@@ -486,33 +621,33 @@ export default function AssessmentPage() {
                     </RadioGroup.Root>
                   )}
 
-                  {currentQuestionData.question_type === "DRAWING" && (
-                    <ReactSketchCanvas
-                      ref={canvasRef}
-                      onStroke={() => {
-                        canvasRef.current?.exportPaths().then((data) => {
-                          setCurrentAnswer(JSON.stringify(data));
-                          setQuestions(
-                            questions?.map((questionItem) => {
-                              if (questionItem.id == currentQuestionData.id) {
-                                return {
-                                  ...questionItem,
-                                  given_answer: JSON.stringify(data),
-                                };
-                              }
-                              return questionItem;
-                            })
-                          );
-                        });
-                      }}
-                      width="100%"
-                      height="30vh"
-                      className="!border !border-[#333333] !rounded-lg shadow-[2px_3px_0_0px_rgba(51,51,51,1)] hover:cursor-crosshair"
-                      svgStyle={{ borderRadius: "10px" }}
+                  {usingBoard && (
+                    <DrawingBoard
+                      ref={boardRef}
+                      onChange={setAnswer}
+                      fullscreenHeader={
+                        <>
+                          {isMultiPart && (
+                            <div className="mb-2">
+                              <MathJax inline dynamic>
+                                {currentQuestionData.context}
+                              </MathJax>
+                            </div>
+                          )}
+                          {isMultiPart && (
+                            <span className="mr-2 font-semibold">
+                              ({partLabel(currentPart)})
+                            </span>
+                          )}
+                          <MathJax inline dynamic>
+                            {currentQuestionData.question}
+                          </MathJax>
+                        </>
+                      }
                     />
                   )}
 
-                  {currentQuestionData.question_type === "BOOL" && (
+                  {!usingBoard && currentQuestionData.question_type === "BOOL" && (
                     <RadioGroup.Root
                       value={currentAnswer}
                       onValueChange={(value) => {
@@ -548,7 +683,7 @@ export default function AssessmentPage() {
                     </RadioGroup.Root>
                   )}
 
-                  {currentQuestionData.question_type === "LATEX" && (
+                  {!usingBoard && currentQuestionData.question_type === "LATEX" && (
                     <textarea
                       value={currentAnswer}
                       onChange={(e) => {
@@ -587,46 +722,6 @@ export default function AssessmentPage() {
                       {isCheckingWithAI ? "Checking..." : "Check With AI"} ✨
                     </Button>
 
-                    <button
-                      onClick={() => {
-                        // for a part, send the shared context and the earlier parts with their answers too
-                        const problem = isMultiPart
-                          ? buildPartPrompt(currentParts, currentPart)
-                          : currentQuestionData.question || "";
-                        if (isMultiPart) {
-                          // the chat spans all parts, so label which part this explanation is for
-                          setCurrentQuestionChat(
-                            (prev) =>
-                              prev +
-                              USER_START +
-                              `How do I solve part (${partLabel(currentPart)})?` +
-                              USER_END
-                          );
-                        }
-                        const eventStream = new EventSource(
-                          `${process.env.NODE_ENV == "production" ? process.env.NEXT_PUBLIC_BACKEND_URL : "http://localhost:8000"}/explanation?problem=${encodeURIComponent(
-                            problem
-                          )}`
-                        );
-                        eventStream.onmessage = (e) => {
-                          console.log("woah", e.data);
-                          if (e.data === "[DONE]") {
-                            eventStream.close();
-                            return;
-                          }
-                          // Chunks are JSON-encoded so newlines survive the event stream
-                          const chunk = parseStreamChunk(e.data);
-                          setCurrentQuestionChat((prev) => prev + chunk);
-                        };
-                        eventStream.onerror = (e) => {
-                          console.error(e);
-                          eventStream.close();
-                        };
-                      }}
-                      className="text-[#4169E1] text-sm font-medium hover:underline"
-                    >
-                      How do I solve this?
-                    </button>
                   </div>
 
                   {currentQuestionData.is_answered &&
