@@ -66,7 +66,7 @@ export default function CourseTestsPage() {
       </div>
 
       <div className="fixed bottom-0 left-0 right-0 p-6 flex justify-center">
-        <Link 
+        <Link
           href={`/dashboard/practice/courses/${course_id}/generate`}
           className="bg-[#333333] text-white px-6 py-3 rounded-full font-medium transition-transform hover:-translate-y-1"
         >

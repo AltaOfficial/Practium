@@ -72,7 +72,10 @@ export default function ChatWithAI({
   currentQuestionChat,
   setCurrentQuestionChat,
   questionContext,
+  courseId,
 }: {
+  // the class the question belongs to: the tutor uses its context and can add to its memory
+  courseId?: string;
   currentQuestionChat: string;
   setCurrentQuestionChat: Dispatch<SetStateAction<string>>;
   // the question the student is on and their answers, sent along with each message
@@ -109,7 +112,9 @@ export default function ChatWithAI({
     const eventStream = new EventSource(
       `${process.env.NODE_ENV == "production" ? process.env.NEXT_PUBLIC_BACKEND_URL : "http://localhost:8000"}/ask?messages=${encodeURIComponent(
         JSON.stringify(messages)
-      )}&context=${encodeURIComponent(questionContext || "")}`
+      )}&context=${encodeURIComponent(questionContext || "")}${
+        courseId ? `&course_id=${encodeURIComponent(courseId)}` : ""
+      }`
     );
 
     eventStream.onmessage = (e) => {

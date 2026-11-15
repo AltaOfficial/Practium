@@ -283,6 +283,7 @@ export default function AssessmentPage() {
       question,
       answer,
       canvasPath: usingBoard ? currentAnswer : undefined,
+      courseId: params.course_id as string,
       // parts are graded with the shared context and the earlier parts,
       // and a question with a figure with what the figure shows
       questionText: isMultiPart
@@ -343,7 +344,7 @@ export default function AssessmentPage() {
     const eventStream = new EventSource(
       `${process.env.NODE_ENV == "production" ? process.env.NEXT_PUBLIC_BACKEND_URL : "http://localhost:8000"}/explanation?problem=${encodeURIComponent(
         problem
-      )}`
+      )}&course_id=${params.course_id}`
     );
     eventStream.onmessage = (e) => {
       if (e.data === "[DONE]") {
@@ -846,6 +847,7 @@ export default function AssessmentPage() {
           <ChatWithAI
             currentQuestionChat={currentQuestionChat}
             setCurrentQuestionChat={setCurrentQuestionChat}
+            courseId={params.course_id as string}
             questionContext={
               currentQuestionData
                 ? buildChatContext(currentParts, currentPart)

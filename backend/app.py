@@ -464,6 +464,64 @@ def generate_assessment():
         "status": "Generation complete!",
     }})
 
+@server.route("/coursecontextfile", methods=["POST"])
+def add_course_context_file():
+    """Adds a file (worked solutions, a rubric, graded work...) to the context of a class.
+
+    The file is turned into text once, here, so the AI never has to look at the file itself again."""
+    request_state = clerk_client.authenticate_request(request, AuthenticateRequestOptions(authorized_parties=["http://frontend:3000", "http://localhost:3000", os.environ.get("FRONTEND_URL")]))
+    if request_state.is_signed_in != True:
+        return jsonify({"error": request_state.reason}), 401
+    course = get_course(request.form.get("courseId"))
+    if not course or course.get("user_id") != request_state.payload.get("sub"):
+        return jsonify({"error": "Course not found"}), 404
+
+    uploaded_file = request.files.get("file")
+    if not uploaded_file or not uploaded_file.filename:
+        return jsonify({"error": "No file uploaded"}), 400
+    try:
+        documents_text, images_base64_encoded = files_to_message_content([uploaded_file])
+    except UnreadableFile as exception:
+        return jsonify({"error": str(exception)}), 400
+    if not documents_text and not images_base64_encoded:
+        return jsonify({"error": "Nothing could be read from this file"}), 400
+
+    completion = chatgpt_client.chat.completions.create(
+        model="gpt-5.6-luna",
+        reasoning_effort="medium",
+        response_format={"type": "json_object"},
+        messages=[
+            {
+                "role": "system",
+                "content": """A student uploaded this file as context for one of their classes. It may be worked solutions, graded work, a rubric, a syllabus, or anything else that shows how the class works and what the professor expects.
+                Turn it into text, so it can be used from now on without the file. Return a JSON object with:
+
+                - "content" (string): a faithful text version of the whole file. Transcribe everything in it, in order, including problem statements, every step of the solutions, and every written explanation, in the wording of the file. Write math as LaTeX inside $...$. Describe figures and drawings in words. Dont add solutions, comments or corrections of your own.
+                - "summary" (string): 150 words at most. What this file shows about how answers in this class must be written to get full credit: the structure of a full answer, the steps and justifications that are expected, how much has to be explained in words, notation, units, rounding. Write it as instructions to a grader, specific enough to tell a full answer from an incomplete one. Only say what the file actually shows. If it shows nothing about how answers should be written, say in one sentence what the file contains.
+
+                Return only the JSON object.
+                """
+            },
+            {"role": "user", "content": [*documents_text, *images_base64_encoded]},
+        ],
+    )
+    try:
+        parsed_file = json.loads(completion.choices[0].message.content)
+    except json.JSONDecodeError:
+        return jsonify({"error": "Could not read this file, try again"}), 502
+
+    context_file = {
+        "id": str(uuid.uuid4()),
+        "name": uploaded_file.filename,
+        "content": str(parsed_file.get("content") or "")[:MAX_CONTEXT_FILE_CHARACTERS],
+        "summary": str(parsed_file.get("summary") or ""),
+    }
+    # read the course again: turning the file into text takes a while and other files may have been added meanwhile
+    course = get_course(course["id"]) or course
+    context_files = [*(course.get("context_files") or []), context_file]
+    supabase.table("courses").update({"context_files": context_files}).eq("id", course["id"]).execute()
+    return jsonify({"context_files": context_files})
+
 @server.route("/checkwithai", methods=["POST"])
 async def check_with_ai():
     # check if content type is form data then assume its a drawing question
@@ -658,6 +716,16 @@ async def check_with_ai():
 @server.route("/explanation")
 def explain_problem():
     problem = request.args.get("problem")
+    # solutions are written the way the class wants them, using its example solutions
+    class_context = course_context_text(get_course(request.args.get("course_id"))) if request.args.get("course_id") else ""
+    class_context_instruction = ""
+    if class_context:
+        class_context_instruction = (
+            "\n\nThis problem is from a class. Below is what the student has provided about it: notes, things to remember, "
+            "and example material such as worked solutions. Write the solution the way this class expects answers to be "
+            "written (the same structure, steps, level of justification and notation), so the student sees what a full-credit answer looks like."
+            f"\n\n<class_context>\n{class_context}\n</class_context>"
+        )
 
     def explanation_stream():
         stream = chatgpt_client.chat.completions.create(
@@ -677,6 +745,7 @@ def explain_problem():
                     Use the shared context and build on the earlier parts and the student's answers to them
                     instead of re-solving them, but point it out if an earlier answer is wrong and this part depends on it.
                     """
+                    + class_context_instruction
                 )},
                 {"role": "user", "content": f"""Explain how to solve this problem in detail:\n\n{problem}
                 """}
@@ -770,24 +839,81 @@ def ask_ai():
                 "\nThe student is working on the question below. Their answers so far are included."
                 "\n\n" + question_context
             )
+        # the class the question belongs to: what is known about it, and a way to remember more
+        course_id = request.args.get("course_id")
+        course = get_course(course_id) if course_id else None
+        if course:
+            class_context = course_context_text(course, brief=True)
+            if class_context:
+                system_message["content"] += (
+                    "\n\nThe question is from a class. This is what the student has provided about it. Follow it when you help, "
+                    "for example by explaining things the way the professor expects answers to be written."
+                    f"\n\n<class_context>\n{class_context}\n</class_context>"
+                )
+            system_message["content"] += (
+                "\n\nYou can remember things about this class with the remember_for_class tool. Use it when the student tells you "
+                "something lasting about the class: how the professor wants answers written, what kinds of questions the professor asks, "
+                "what they take points off for, notation, units or rounding rules. Save one short note per fact, then go on and reply "
+                "to the student as usual, mentioning in a few words that you will remember it for this class. "
+                "Dont save things that are only about the current question, things that are already in the class context, or guesses of your own."
+            )
         messages.insert(0, system_message)
         print(messages)
     except Exception as e:
         return jsonify({"error": f"Invalid messages format: {str(e)}"}), 400
-    
+
     def response_stream():
-        stream = chatgpt_client.chat.completions.create(
-            model="gpt-5.6-luna",
-            messages=messages,
-            stream=True
-        )
-        
-        for chunk in stream:
-            if chunk.choices[0].delta.content is not None:
-                print(chunk.choices[0].delta.content)
-                # JSON-encode so newlines in the chunk don't break SSE framing
-                yield f"data: {json.dumps(chunk.choices[0].delta.content)}\n\n"
-        
+        # the model may save to the class memory first and then reply, which takes another round
+        for _ in range(3):
+            stream = chatgpt_client.chat.completions.create(
+                model="gpt-5.6-luna",
+                messages=messages,
+                stream=True,
+                **({"tools": [REMEMBER_FOR_CLASS_TOOL]} if course else {})
+            )
+
+            reply = ""
+            tool_calls = {} # the calls arrive in pieces, keyed by their index
+            for chunk in stream:
+                if not chunk.choices:
+                    continue
+                delta = chunk.choices[0].delta
+                if delta.content is not None:
+                    reply += delta.content
+                    # JSON-encode so newlines in the chunk don't break SSE framing
+                    yield f"data: {json.dumps(delta.content)}\n\n"
+                for piece in delta.tool_calls or []:
+                    tool_call = tool_calls.setdefault(piece.index, {"id": "", "name": "", "arguments": ""})
+                    if piece.id:
+                        tool_call["id"] = piece.id
+                    if piece.function and piece.function.name:
+                        tool_call["name"] = piece.function.name
+                    if piece.function and piece.function.arguments:
+                        tool_call["arguments"] += piece.function.arguments
+
+            if not tool_calls:
+                break
+
+            messages.append({
+                "role": "assistant",
+                "content": reply or None,
+                "tool_calls": [
+                    {"id": tool_call["id"], "type": "function", "function": {"name": tool_call["name"], "arguments": tool_call["arguments"]}}
+                    for tool_call in tool_calls.values()
+                ],
+            })
+            for tool_call in tool_calls.values():
+                result = "Could not save this."
+                if tool_call["name"] == "remember_for_class":
+                    try:
+                        result = add_course_memory(course["id"], json.loads(tool_call["arguments"]).get("memory"))
+                    except Exception as exception:
+                        print(f"Could not save class memory: {exception}")
+                messages.append({"role": "tool", "tool_call_id": tool_call["id"], "content": result})
+            if reply:
+                # keep what comes next apart from what was already said
+                yield f"data: {json.dumps(chr(10) + chr(10))}\n\n"
+
         yield "data: [DONE]\n\n"
     
     return Response(response_stream(), mimetype="text/event-stream")

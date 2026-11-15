@@ -41,7 +41,10 @@ export async function sendCheckWithAI({
   answer,
   canvasPath,
   questionText,
+  courseId,
 }: {
+  // the class the question belongs to, so the answer is graded the way that class expects
+  courseId?: string;
   question: Question;
   answer: string;
   // the board's paths, when the answer is a drawing (of any question type);
@@ -64,6 +67,7 @@ export async function sendCheckWithAI({
     const formData = new FormData();
     formData.append("question", JSON.stringify(question));
     formData.append("answer", answer);
+    if (courseId) formData.append("course_id", courseId);
 
     const response = await fetch(`${process.env.VERCEL_ENV == "production" ? process.env.NEXT_PUBLIC_BACKEND_URL : "http://backend:8000"}/checkwithai`, {
       method: "POST",
@@ -83,7 +87,11 @@ export async function sendCheckWithAI({
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ question: question, answer: answer }),
+      body: JSON.stringify({
+        question: question,
+        answer: answer,
+        course_id: courseId,
+      }),
     });
     console.log(response);
 

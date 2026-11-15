@@ -1,6 +1,7 @@
 "use client";
 import CourseCard from "@/components/Coursecard";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import CourseContext from "@/components/CourseContext";
 import { Database } from "@/utils/supabase/database.types";
 import { getCourses } from "./actions";
 import Link from "next/link";
@@ -13,6 +14,9 @@ type Course = Database["public"]["Tables"]["courses"]["Row"] & {
 
 export default function PracticePage() {
   const [courses, setCourses] = useState<Course[]>([]);
+  // the course whose context is open
+  const [contextCourse, setContextCourse] = useState<Course | null>(null);
+  const closeContext = useCallback(() => setContextCourse(null), []);
 
   useEffect(() => {
     getCourses().then(({ data, error }) =>
@@ -46,9 +50,18 @@ export default function PracticePage() {
             testsGenerated={course.total_tests || 0}
             lastAccessed={"5 hours ago"}
             href={`/dashboard/practice/courses/${course.id}`}
+            onContextClick={() => setContextCourse(course)}
           />
         ))}
       </div>
+
+      {contextCourse && (
+        <CourseContext
+          courseId={contextCourse.id}
+          courseName={contextCourse.name || "Untitled Course"}
+          onClose={closeContext}
+        />
+      )}
 
       <div className="flex justify-center">
         <Link
