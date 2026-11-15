@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { sendCheckWithAI, getQuestions, getAssessment } from "./actions";
 import { useParams } from "next/navigation";
 import { Database } from "@/utils/supabase/database.types";
@@ -13,7 +13,11 @@ import {
 } from "react-icons/fi";
 import { FaRedo } from "react-icons/fa";
 import { MathJax } from "better-react-mathjax";
-import ChatWithAI, { parseStreamChunk } from "@/components/ChatWithAI";
+import ChatWithAI, {
+  parseStreamChunk,
+  USER_START,
+  USER_END,
+} from "@/components/ChatWithAI";
 import Image from "next/image";
 import { ReactSketchCanvas, ReactSketchCanvasRef } from "react-sketch-canvas";
 
@@ -24,10 +28,89 @@ interface VideoSuggestion {
   videoId: string;
 }
 
+// Each part of a multi-part question is its own row; rows that share a
+// group_number form one question. Rows without one are standalone questions.
+function groupQuestions(questions: Question[] = []): Question[][] {
+  const groups: Question[][] = [];
+  for (const question of questions) {
+    const last = groups[groups.length - 1];
+    if (
+      question.group_number != null &&
+      last?.[0].group_number === question.group_number
+    ) {
+      last.push(question);
+    } else {
+      groups.push([question]);
+    }
+  }
+  return groups;
+}
+
+const partLabel = (index: number) => String.fromCharCode(97 + index);
+
+// The full problem for one part: the shared context, the earlier parts with
+// the student's answers, then the part itself.
+function describeAnswer(question: Question) {
+  const answer =
+    question.question_type === "DRAWING"
+      ? question.given_answer
+        ? "(answered with a drawing)"
+        : ""
+      : question.given_answer;
+  const mark = !question.is_answered
+    ? "not checked yet"
+    : question.is_correct
+    ? "marked correct"
+    : "marked incorrect";
+  return `Student's answer: ${
+    answer ? `${answer} (${mark})` : "(not answered yet)"
+  }`;
+}
+
+// What the student is looking at, for follow-up messages in the chat: the
+// question (every part of it, for a multi-part question) and their answers.
+function buildChatContext(parts: Question[], partIndex: number) {
+  if (parts[partIndex].group_number == null) {
+    return `Question: ${parts[partIndex].question}\n${describeAnswer(
+      parts[partIndex]
+    )}`;
+  }
+  return [
+    `Shared context:\n${parts[partIndex].context || ""}`,
+    ...parts.map(
+      (part, index) =>
+        `Part (${partLabel(index)}): ${part.question}\n${describeAnswer(part)}`
+    ),
+    `The student is currently on part (${partLabel(partIndex)}).`,
+  ].join("\n\n");
+}
+
+function buildPartPrompt(parts: Question[], partIndex: number) {
+  const earlierParts = parts
+    .slice(0, partIndex)
+    .map(
+      (part, index) =>
+        `Part (${partLabel(index)}): ${part.question}\n${describeAnswer(part)}`
+    );
+
+  return [
+    `This is one part of a multi-part question.`,
+    `Shared context:\n${parts[partIndex].context || ""}`,
+    ...(earlierParts.length > 0
+      ? [`Earlier parts:\n\n${earlierParts.join("\n\n")}`]
+      : []),
+    `The part to answer now, part (${partLabel(partIndex)}):\n${
+      parts[partIndex].question
+    }`,
+  ].join("\n\n");
+}
+
 export default function AssessmentPage() {
   const params = useParams();
   const [questions, setQuestions] = useState<Question[]>();
+  // index of the current question, and of the part within it
   const [currentQuestion, setCurrentQuestion] = useState(0);
+  const [currentPart, setCurrentPart] = useState(0);
   const [currentAnswer, setCurrentAnswer] = useState("");
   const [isCheckingWithAI, setIsCheckingWithAI] = useState(false);
   const [currentQuestionChat, setCurrentQuestionChat] = useState("");
@@ -35,6 +118,17 @@ export default function AssessmentPage() {
   const [isVideosVisible, setIsVideosVisible] = useState(false);
   const [videoSuggestions, setVideoSuggestions] = useState<VideoSuggestion[]>([]);
   const canvasRef = useRef<ReactSketchCanvasRef>(null);
+
+  const questionGroups = useMemo(() => groupQuestions(questions), [questions]);
+  const currentParts = questionGroups[currentQuestion] || [];
+  const currentQuestionData = currentParts[currentPart];
+  const isMultiPart = currentQuestionData?.group_number != null;
+
+  const goToQuestion = (index: number) => {
+    if (index < 0 || index >= questionGroups.length) return;
+    setCurrentPart(0);
+    setCurrentQuestion(index);
+  };
 
   type Video = {
     videoRenderer: {
@@ -47,13 +141,13 @@ export default function AssessmentPage() {
   
   const { mutate: mutateVideoSuggestions } = useSWR(`${process.env.NODE_ENV == "production" ? process.env.NEXT_PUBLIC_BACKEND_URL : "http://localhost:8000"}/get_youtube_video_suggestions`, {
     fetcher: async (url: string) => {
-      if(questions && questions.length > 0) {
+      if(currentQuestionData) {
         const response = await fetch(url, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ question: questions[currentQuestion] }),
+          body: JSON.stringify({ question: currentQuestionData }),
         });
 
         const data = await response.json();
@@ -85,9 +179,6 @@ export default function AssessmentPage() {
       assessmentId: parseInt(params.assessment_id as string),
     }).then(({ data }) => {
       setQuestions(data);
-      if (data && data.length > 0) {
-        setCurrentAnswer(data[currentQuestion]?.given_answer || "");
-      }
     });
 
     return () => {
@@ -100,17 +191,17 @@ export default function AssessmentPage() {
   useEffect(() => {
     // if the user has answered the question in the past, set the current answer for that question to the previous answer upon loading the assesment again
 
-    if (questions && questions.length > 0) {
-      setCurrentAnswer(questions[currentQuestion]?.given_answer || "");
+    if (currentQuestionData) {
+      setCurrentAnswer(currentQuestionData.given_answer || "");
       if (
-        questions[currentQuestion]?.question_type === "DRAWING" &&
-        questions[currentQuestion].given_answer
+        currentQuestionData.question_type === "DRAWING" &&
+        currentQuestionData.given_answer
       ) {
         canvasRef.current?.clearCanvas();
         canvasRef.current?.loadPaths(
-          JSON.parse(questions[currentQuestion].given_answer)
+          JSON.parse(currentQuestionData.given_answer)
         );
-      } else if (questions[currentQuestion]?.question_type === "DRAWING") {
+      } else if (currentQuestionData.question_type === "DRAWING") {
         canvasRef.current?.clearCanvas();
       }
     }
@@ -118,7 +209,10 @@ export default function AssessmentPage() {
     mutateVideoSuggestions().then((data) => {
       setVideoSuggestions(data || []);
     });
+  }, [currentQuestion, currentPart, questions?.length]);
 
+  // the chat is shared by all parts of a question, so it only resets when the question changes
+  useEffect(() => {
     return () => {
       setCurrentQuestionChat("");
     }
@@ -132,7 +226,15 @@ export default function AssessmentPage() {
     answer: string;
   }) {
     setIsCheckingWithAI(true);
-    sendCheckWithAI({ question, answer, canvasPath: currentAnswer }).then(
+    sendCheckWithAI({
+      question,
+      answer,
+      canvasPath: currentAnswer,
+      // parts are graded with the shared context and the earlier parts
+      questionText: isMultiPart
+        ? buildPartPrompt(currentParts, currentPart)
+        : undefined,
+    }).then(
       (data) => {
         if (data.error) {
           return console.error(data.error);
@@ -153,7 +255,6 @@ export default function AssessmentPage() {
     });
   }
 
-  const currentQuestionData = questions?.[currentQuestion];
   const isAnswered = currentQuestionData?.is_answered;
   const isCorrect = currentQuestionData?.is_correct;
 
@@ -230,7 +331,7 @@ export default function AssessmentPage() {
                 {assessmentName}
               </h1>
               <p className="mt-2 text-lg text-[#878787] ">
-                Question {currentQuestion + 1} of {questions?.length || 0}
+                Question {currentQuestion + 1} of {questionGroups.length}
               </p>
             </div>
 
@@ -246,18 +347,20 @@ export default function AssessmentPage() {
                       </button>
                     </DropdownMenu.Trigger>
                     <DropdownMenu.Content className="bg-[#333333] shadow-lg">
-                      {questions?.map((question, index) => (
+                      {questionGroups.map((parts, index) => (
                         <DropdownMenu.Item
                           key={index}
                           onClick={() => {
-                            setCurrentQuestion(index);
+                            goToQuestion(index);
                           }}
                           className="flex items-center justify-between px-4 py-2 hover:bg-[#333333]"
                         >
                           <span>Question {index + 1}</span>
-                          {question.is_correct ? (
+                          {parts.every((part) => part.is_correct) ? (
                             <span className="text-green-500">✓</span>
-                          ) : question.is_answered ? (
+                          ) : parts.some(
+                              (part) => part.is_answered && !part.is_correct
+                            ) ? (
                             <span className="text-red-500">×</span>
                           ) : null}
                         </DropdownMenu.Item>
@@ -266,14 +369,7 @@ export default function AssessmentPage() {
                   </DropdownMenu.Root>
 
                   <button
-                    onClick={() => {
-                      if (questions && currentQuestion < questions.length - 1) {
-                        setCurrentAnswer(
-                          questions?.[currentQuestion + 1].given_answer || ""
-                        );
-                        setCurrentQuestion((prev) => prev + 1);
-                      }
-                    }}
+                    onClick={() => goToQuestion(currentQuestion + 1)}
                     className="!bg-transparent flex items-center outline-none px-3 py-1.5 !border-2 !border-[#333333] text-[#333333] text-sm rounded-[4px] font-medium"
                   >
                     <FaRedo size={20} className="mr-2" />
@@ -282,14 +378,7 @@ export default function AssessmentPage() {
                 </div>
 
                 <button
-                  onClick={() => {
-                    if (questions && currentQuestion < questions.length - 1) {
-                      setCurrentAnswer(
-                        questions?.[currentQuestion + 1].given_answer || ""
-                      );
-                      setCurrentQuestion((prev) => prev + 1);
-                    }
-                  }}
+                  onClick={() => goToQuestion(currentQuestion + 1)}
                   className="!bg-[#333333] justify-end flex items-center outline-none px-3 py-1.5 !border-2 !border-[#333333] text-white text-sm rounded-[4px] font-medium hover:opacity-90"
                 >
                   Next Question
@@ -311,7 +400,50 @@ export default function AssessmentPage() {
               }
             `}
               >
+                {isMultiPart && (
+                  <>
+                    {/* Context shared by every part */}
+                    <div className="mb-4">
+                      <MathJax inline dynamic className="text-[#333333]">
+                        {currentQuestionData.context}
+                      </MathJax>
+                    </div>
+
+                    {/* Part switcher */}
+                    <div className="flex items-center gap-2 mb-4 pb-4 border-b border-gray-200">
+                      {currentParts.map((part, index) => (
+                        <button
+                          key={part.id}
+                          onClick={() => setCurrentPart(index)}
+                          title={`Part ${partLabel(index)}`}
+                          className={`w-8 h-8 flex items-center justify-center outline-none !border-2 text-sm rounded-[4px] font-medium ${
+                            part.is_correct
+                              ? "!border-green-500"
+                              : part.is_answered
+                              ? "!border-red-500"
+                              : "!border-[#333333]"
+                          } ${
+                            index === currentPart
+                              ? "!bg-[#333333] text-white"
+                              : "!bg-transparent text-[#333333]"
+                          }`}
+                        >
+                          {partLabel(index)}
+                        </button>
+                      ))}
+                      <span className="ml-2 text-sm text-[#878787]">
+                        Part {currentPart + 1} of {currentParts.length}
+                      </span>
+                    </div>
+                  </>
+                )}
+
                 <div className="mb-6">
+                  {isMultiPart && (
+                    <span className="mr-2 font-semibold text-[#333333]">
+                      ({partLabel(currentPart)})
+                    </span>
+                  )}
                   <MathJax inline dynamic className="text-[#333333]">
                     {currentQuestionData.question}
                   </MathJax>
@@ -457,9 +589,23 @@ export default function AssessmentPage() {
 
                     <button
                       onClick={() => {
+                        // for a part, send the shared context and the earlier parts with their answers too
+                        const problem = isMultiPart
+                          ? buildPartPrompt(currentParts, currentPart)
+                          : currentQuestionData.question || "";
+                        if (isMultiPart) {
+                          // the chat spans all parts, so label which part this explanation is for
+                          setCurrentQuestionChat(
+                            (prev) =>
+                              prev +
+                              USER_START +
+                              `How do I solve part (${partLabel(currentPart)})?` +
+                              USER_END
+                          );
+                        }
                         const eventStream = new EventSource(
                           `${process.env.NODE_ENV == "production" ? process.env.NEXT_PUBLIC_BACKEND_URL : "http://localhost:8000"}/explanation?problem=${encodeURIComponent(
-                            currentQuestionData.question || ""
+                            problem
                           )}`
                         );
                         eventStream.onmessage = (e) => {
@@ -560,6 +706,11 @@ export default function AssessmentPage() {
           <ChatWithAI
             currentQuestionChat={currentQuestionChat}
             setCurrentQuestionChat={setCurrentQuestionChat}
+            questionContext={
+              currentQuestionData
+                ? buildChatContext(currentParts, currentPart)
+                : undefined
+            }
           />
         </div>
       </div>

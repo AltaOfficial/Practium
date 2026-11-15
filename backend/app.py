@@ -42,7 +42,12 @@ def generate_assessment():
     if request_state.is_signed_in != True:
         return jsonify({"message": request_state.reason})
     user_id = request_state.payload.get("sub")
-    num_of_questions = request.form.get("numOfQuestions", 10) # number of questions to produce
+    num_of_questions = request.form.get("numOfQuestions", 10) # number of questions to produce, or "auto" to match the input
+    auto_num_of_questions = num_of_questions == "auto"
+    if auto_num_of_questions:
+        questions_amount_instruction = "Choose the number of questions yourself, based on the input. If the input is a set of problems (homework, a worksheet, a practice exam), generate one question for every problem in it, in the same order (a problem with parts is one multi-part question). If the input is other material (notes, slides, a reading, a topic), generate as many questions as it takes to cover its main ideas, between 5 and 20."
+    else:
+        questions_amount_instruction = f"Generate an assessment of {num_of_questions} questions based on the input."
     form_images = request.files.getlist("uploadedFiles") # images to create a question from
     print(form_images)
     text_input = request.form.get("content", "") # Get textInput from formData
@@ -84,21 +89,36 @@ def generate_assessment():
             - drawing problem: The "question_type" value should be "DRAWING".
             - table problem: The "question_type" value should be "TABLE".
             
-            **MathJax Usage:**  
+            **Multi-part questions:**
+            - Keep the structure of the input. If a problem in the input has lettered or numbered parts (like 29. a, b, c or 30. a) b) c)) that share one setup, the question you create from it MUST be a multi-part question with one part for each of its parts.
+            - NEVER split the parts of a problem into separate standalone questions, and NEVER squeeze several parts into the text of one question.
+            - Also create a multi-part question when several sub-questions naturally build on the same scenario.
+            - A multi-part question counts as ONE question toward the total, no matter how many parts it has.
+            - If you need more questions than the input has problems, create more variations of those problems with the same structure (a multi-part problem gives more multi-part questions). Dont reach the total by splitting parts up.
+            - Instead of "question" and "question_type", a multi-part question object has:
+                - `"context"` (string): the setup shared by all the parts, with all the given information the parts rely on.
+                - `"parts"` (array of 2 or more objects): each part is shaped like a normal question object ("question", "question_type", and "answers" when needed). Later parts can build on earlier ones.
+            - Dont put labels like "(a)" or "Part b" in the text of a part, and dont repeat the context inside the parts.
+
+            **MathJax Usage:**
             - Apply MathJax **to questions and answers wherever beneficial**, including MCQ and BOOL questions.  
             - Use \\(...\\) for inline math (e.g., "Solve for \\(x\\) in \\(2x + 3 = 7\\).").  
             - Use \\[...\\] for display math (e.g., "Evaluate: \\[ \\int_0^1 x^2 \\,dx \\]").  
 
             **Assessment Requirements:**  
-            - Generate an assessment of {num_of_questions} questions based on the input.
+            - {questions_amount_instruction}
             - Use MathJax in **both questions and answers** whenever it improves clarity.
             - The response must be a **valid JSON object** with:
             - `"image_description"` (string) say what you see in the image, include EVERYTHING, describe all of it.
             - `"assessment_name"` (string)  
-            - `"questions"` (array of objects). Each object must have:
+            - `"questions"` (array of objects). Each object is either a single question or a multi-part question.
+            - A single question must have:
                 - `"question"` (string, using MathJax when beneficial)
                 - `"question_type"` (string, either `"MCQ"`, `"BOOL"`, or `"LATEX"`)
                 - If `"question_type"` is `"MCQ"` or `"BOOL"`, it must include `"answers"` (array of strings, using MathJax where beneficial).
+            - A multi-part question must have:
+                - `"context"` (string, using MathJax when beneficial)
+                - `"parts"` (array of single question objects)
 
             **Response Format:**  
             - Return a **valid JSON object**.  
@@ -142,7 +162,7 @@ def generate_assessment():
     print(parsed_assessment["assessment_name"])
     questions = []
 
-    assesment_id = supabase.table("assessments").insert({ "user_id": user_id, "total_questions": num_of_questions, "name": parsed_assessment["assessment_name"], "course_id": request.form.get("courseId", 1) }).execute().data[0]["id"]
+    assesment_id = supabase.table("assessments").insert({ "user_id": user_id, "total_questions": len(parsed_assessment["questions"]) if auto_num_of_questions else num_of_questions, "name": parsed_assessment["assessment_name"], "course_id": request.form.get("courseId", 1) }).execute().data[0]["id"]
     print(assesment_id)
 
     # check if we got the right amount of questions
@@ -162,24 +182,41 @@ def generate_assessment():
             if len(parsed_assessment["questions"]) < int(num_of_questions):
                 check_questions_length()
 
-    check_questions_length()
+    if not auto_num_of_questions:
+        check_questions_length()
 
-    for question in parsed_assessment["questions"]:
+    def question_row(question):
+        row = {
+            "question": question["question"],
+            "question_type": question["question_type"],
+            "is_answered": False,
+            "assessment_id": assesment_id,
+        }
         if question["question_type"] == "MCQ":
-            questions.append({
-                "question": question["question"],
-                "question_type": question["question_type"],
-                "is_answered": False,
-                "assessment_id": assesment_id,
-                "answers": question["answers"]
-            })
+            row["answers"] = question["answers"]
+        return row
+
+    # each part of a multi-part question is its own row; the parts share a group_number and context
+    has_multi_part = False
+    for group_number, question in enumerate(parsed_assessment["questions"], start=1):
+        if question.get("parts"):
+            has_multi_part = True
+            for part in question["parts"]:
+                questions.append({
+                    **question_row(part),
+                    "group_number": group_number,
+                    "context": question.get("context", ""),
+                })
         else:
-            questions.append({
-                "question": question["question"],
-                "question_type": question["question_type"],
-                "is_answered": False,
-                "assessment_id": assesment_id,
-            })
+            questions.append(question_row(question))
+
+    if has_multi_part:
+        # rows inserted together need the same keys
+        for row in questions:
+            row.setdefault("group_number", None)
+            row.setdefault("context", None)
+            row.setdefault("answers", None)
+
     supabase.table("questions").insert(questions).execute()
     return jsonify({"message": {
         "generated_assessement": parsed_assessment,
@@ -376,6 +413,10 @@ def explain_problem():
                     For math expressions, use the following format:
                     - For inline math: $1.45 \\times 10^{-2}$
                     - For display math: $$1.45 \\times 10^{-2}$$
+
+                    If the problem is one part of a multi-part question, explain only the part to answer now.
+                    Use the shared context and build on the earlier parts and the student's answers to them
+                    instead of re-solving them, but point it out if an earlier answer is wrong and this part depends on it.
                     """
                 )},
                 {"role": "user", "content": f"""Explain how to solve this problem in detail:\n\n{problem}
@@ -456,6 +497,12 @@ def ask_ai():
             - For display math: $$1.45 \\times 10^{-2}$$
             """
         }
+        question_context = request.args.get("context")
+        if question_context:
+            system_message["content"] += (
+                "\nThe student is working on the question below. Their answers so far are included."
+                "\n\n" + question_context
+            )
         messages.insert(0, system_message)
         print(messages)
     except Exception as e:

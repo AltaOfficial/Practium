@@ -3,13 +3,15 @@ import { generateAssessment } from "./actions";
 import { useParams, useRouter } from "next/navigation";
 import { useState, useRef } from "react";
 import Link from "next/link";
-import { FiArrowLeft } from "react-icons/fi";
+import { FiArrowLeft, FiCheck } from "react-icons/fi";
 
 export default function GenerateTestPage() {
   const { course_id } = useParams();
   const router = useRouter();
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
+  // when on, the AI picks the number of questions from the material instead of using a fixed number
+  const [matchMaterial, setMatchMaterial] = useState(false);
   const hiddenFilesInput = useRef<HTMLInputElement>(null);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -142,9 +144,26 @@ export default function GenerateTestPage() {
               min="1"
               max="50"
               defaultValue="10"
-              className="w-full px-4 py-1 rounded-md border text-default border-[#333333] focus:outline-none shadow-[3px_3px_0_0px_rgba(51,51,51,1)]"
+              disabled={matchMaterial}
+              className="w-full px-4 py-1 rounded-md border text-default border-[#333333] focus:outline-none shadow-[3px_3px_0_0px_rgba(51,51,51,1)] disabled:opacity-50"
               required
             />
+            {/* a disabled input is not submitted, so this takes its place */}
+            {matchMaterial && (
+              <input type="hidden" name="numOfQuestions" value="auto" />
+            )}
+            <label className="flex items-center gap-3 mt-4 text-default font-medium cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={matchMaterial}
+                onChange={(e) => setMatchMaterial(e.target.checked)}
+                className="peer sr-only"
+              />
+              <span className="w-5 h-5 shrink-0 flex items-center justify-center rounded-[4px] border border-[#333333] bg-white text-transparent shadow-[1.5px_2px_0_0px_rgba(51,51,51,1)] transition-colors peer-checked:bg-[#333333] peer-checked:text-white peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-[#333333]">
+                <FiCheck size={14} strokeWidth={3} />
+              </span>
+              Let the AI choose how many questions
+            </label>
           </div>
 
           <div className="flex justify-end">

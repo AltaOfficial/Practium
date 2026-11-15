@@ -3,12 +3,13 @@ import { useState, Dispatch, SetStateAction, useRef, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeKatex from "rehype-katex";
 import remarkMath from "remark-math";
+import remarkGfm from "remark-gfm";
 import "katex/dist/katex.min.css";
 
 // The chat is stored as one string; user messages are wrapped in these
 // markers and everything outside them is assistant output.
-const USER_START = "\u0001";
-const USER_END = "\u0002";
+export const USER_START = "\u0001";
+export const USER_END = "\u0002";
 
 // Stream chunks are JSON-encoded strings. Fall back to the raw text if the
 // backend is still sending the old unencoded format.
@@ -52,9 +53,12 @@ function formatMath(text: string) {
 export default function ChatWithAI({
   currentQuestionChat,
   setCurrentQuestionChat,
+  questionContext,
 }: {
   currentQuestionChat: string;
   setCurrentQuestionChat: Dispatch<SetStateAction<string>>;
+  // the question the student is on and their answers, sent along with each message
+  questionContext?: string;
 }) {
   const [messageInput, setMessageInput] = useState("");
   const chatContainerRef = useRef<HTMLDivElement>(null);
@@ -87,7 +91,7 @@ export default function ChatWithAI({
     const eventStream = new EventSource(
       `${process.env.NODE_ENV == "production" ? process.env.NEXT_PUBLIC_BACKEND_URL : "http://localhost:8000"}/ask?messages=${encodeURIComponent(
         JSON.stringify(messages)
-      )}`
+      )}&context=${encodeURIComponent(questionContext || "")}`
     );
 
     eventStream.onmessage = (e) => {

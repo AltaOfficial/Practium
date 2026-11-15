@@ -40,13 +40,21 @@ export async function sendCheckWithAI({
   question,
   answer,
   canvasPath,
+  questionText,
 }: {
   question: Question;
   answer: string;
   canvasPath?: string;
+  // full problem text to grade against, when it is more than question.question (parts of a multi-part question)
+  questionText?: string;
 }) {
   if (!question || !answer) {
     return { error: "Missing question or answer" };
+  }
+
+  const questionId = question.id;
+  if (questionText) {
+    question = { ...question, question: questionText };
   }
 
   let res;
@@ -97,9 +105,9 @@ export async function sendCheckWithAI({
       is_correct: res.correct,
       given_answer: question.question_type === "DRAWING" ? canvasPath : answer,
     })
-    .eq("id", question.id);
+    .eq("id", questionId);
 
-  console.log(question.id);
+  console.log(questionId);
 
   return { correct: res.correct };
 }
