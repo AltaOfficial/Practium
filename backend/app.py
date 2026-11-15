@@ -464,6 +464,115 @@ def generate_assessment():
         "status": "Generation complete!",
     }})
 
+MAX_FLASHCARDS = 100
+
+@server.route("/generateflashcards", methods=["POST"])
+def generate_flashcards():
+    """Makes a deck of flashcards from text and/or uploaded files, and saves it for the signed-in user."""
+    request_state = clerk_client.authenticate_request(request, AuthenticateRequestOptions(authorized_parties=["http://frontend:3000", "http://localhost:3000", os.environ.get("FRONTEND_URL")]))
+    if request_state.is_signed_in != True:
+        return jsonify({"error": request_state.reason}), 401
+    user_id = request_state.payload.get("sub")
+
+    # the class the deck is for
+    course = get_course(request.form.get("courseId"))
+    if not course or course.get("user_id") != user_id:
+        return jsonify({"error": "Course not found"}), 404
+    class_context = course_context_text(course)
+    class_context_instruction = ""
+    if class_context:
+        class_context_instruction = f"""
+                    These cards are for a class. Below, between the <class_context> tags, is what the student has provided about it. Use its notation, its terminology and its level, and when it says what the class has to know or how it is tested, favour that. The things the cards are about still come from the input.
+
+                    <class_context>
+                    {class_context}
+                    </class_context>
+                    """
+
+    # number of cards to produce, or "auto" to let the material decide
+    num_of_cards = request.form.get("numOfCards", "auto")
+    if num_of_cards == "auto":
+        cards_amount_instruction = f"Choose the number of cards yourself: one for every term, fact, formula or idea in the input that is worth memorising, {MAX_FLASHCARDS} at most."
+    else:
+        try:
+            num_of_cards = max(1, min(int(num_of_cards), MAX_FLASHCARDS))
+        except ValueError:
+            return jsonify({"error": "Invalid number of cards"}), 400
+        cards_amount_instruction = f"Make exactly {num_of_cards} cards, on the most important things in the input."
+
+    text_input = request.form.get("content", "")
+    try:
+        documents_text, images_base64_encoded = files_to_message_content(request.files.getlist("uploadedFiles"))
+    except UnreadableFile as exception:
+        return jsonify({"error": str(exception)}), 400
+    user_content = [
+        *([{"type": "text", "text": text_input}] if text_input.strip() else []),
+        *documents_text,
+        *images_base64_encoded,
+    ]
+    if not user_content:
+        return jsonify({"error": "Add some content or a file"}), 400
+
+    try:
+        completion = chatgpt_client.chat.completions.create(
+            model="gpt-5.6-luna",
+            reasoning_effort="medium",
+            response_format={"type": "json_object"},
+            messages=[
+                {
+                    "role": "system",
+                    "content": f"""Make flashcards for a student to memorise the material in the input (text, images, slides or documents). If the input is just a topic, make cards on what a student studying that topic has to know.
+                    {class_context_instruction}
+                    - {cards_amount_instruction}
+                    - Each card tests ONE thing. The "term" is the front: a term, a concept, or a short question. The "definition" is the back: the answer, short enough to recall from memory (one to three sentences, or a formula).
+                    - The back must be answerable from the front alone. Dont refer to the input ("in the slides", "as shown above").
+                    - Dont make two cards on the same thing, and dont put the answer in the front.
+                    - Follow the order of the input.
+                    - Write math in MathJax: \\(...\\) for inline math and \\[...\\] for display math. Everything else is plain text, no markdown.
+
+                    Return a JSON object with:
+                    - "deck_name" (string): a short name for the deck, 6 words at most.
+                    - "cards" (array of objects), each with "term" (string) and "definition" (string).
+
+                    Return only the JSON object.
+                    """
+                },
+                {"role": "user", "content": user_content},
+            ],
+        )
+        parsed_deck = json.loads(completion.choices[0].message.content)
+    except Exception as exception:
+        print(f"Could not generate flashcards: {exception}")
+        return jsonify({"error": "Could not generate flashcards, try again"}), 502
+
+    cards = [
+        {"term": card["term"].strip(), "definition": card["definition"].strip()}
+        for card in (parsed_deck.get("cards") if isinstance(parsed_deck, dict) else None) or []
+        if isinstance(card, dict) and isinstance(card.get("term"), str) and isinstance(card.get("definition"), str)
+        and card["term"].strip() and card["definition"].strip()
+    ][:MAX_FLASHCARDS]
+    if not cards:
+        return jsonify({"error": "Could not generate flashcards, try again"}), 502
+
+    deck_name = parsed_deck.get("deck_name")
+    deck_id = supabase.table("flashcards").insert({
+        "user_id": user_id,
+        "course_id": course["id"],
+        "name": deck_name.strip() if isinstance(deck_name, str) and deck_name.strip() else "Untitled Flashcards",
+        "total_cards": len(cards),
+    }).execute().data[0]["id"]
+    try:
+        supabase.table("flashcard").insert([
+            {**card, "deck_id": deck_id, "position": position} for position, card in enumerate(cards)
+        ]).execute()
+    except Exception as exception:
+        # dont leave a deck with no cards behind
+        print(f"Could not save flashcards: {exception}")
+        supabase.table("flashcards").delete().eq("id", deck_id).execute()
+        return jsonify({"error": "Could not save the flashcards"}), 500
+
+    return jsonify({"deck_id": deck_id})
+
 @server.route("/coursecontextfile", methods=["POST"])
 def add_course_context_file():
     """Adds a file (worked solutions, a rubric, graded work...) to the context of a class.
@@ -562,7 +671,15 @@ async def check_with_ai():
                 {{
                     "explanation": (string), # explanation of why it is incorrect, not how to do it, just why it is incorrect.
                     "feedback": (string), # OPTIONAL note shown to the student in their tutor chat. Write one only when the answer is incorrect AND you can point at the specific step, mistake or misconception where they went wrong. One to three sentences, addressed to the student, saying where it went wrong without giving away the correct answer. Markdown, with math as $...$. Use "" when the answer is correct or there is nothing specific to point at (for example a wrong choice with no working shown).
+                    "marks": (array), # OPTIONAL marks that are drawn on the student's whiteboard, on top of their work, to show where it went wrong. Add them only when the answer is incorrect AND you can see the exact place(s) in the image where the work goes wrong (a wrong term, a step that does not follow, a mislabelled or misdrawn part). At most 3, the earliest mistake first; dont mark things that are only wrong because of an earlier mistake. Use [] when the answer is correct or there is no specific place to point at.
                     "correct": (1 or 0) # 1 if the answer is correct, 0 if the answer is incorrect
+                }}
+
+                Each mark is an object:
+                {{
+                    "box": [left, top, right, bottom], # a tight box around the flawed part of the work, measured on the image: every value is from 0 to 1000, x runs from 0 at the left edge of the image to 1000 at its right edge, y from 0 at the top edge to 1000 at the bottom edge. Be careful to box the exact part you mean and nothing else.
+                    "shape": "circle" or "underline", # "circle" draws a ring around the box (a term, a symbol, part of a diagram); "underline" draws a line under it (a whole line of working)
+                    "note": (string) # a few words written next to the mark saying what is wrong there, without giving away the correct answer. At most 25 characters, only plain letters, digits and + - = / ( ) . , ? ! (no MathJax, no other symbols). Use "" for a mark that needs no words.
                 }}
 
                 Only return valid JSON. Do not include explanations or extra text, no commas NOTHING literally just the json.
@@ -708,7 +825,11 @@ async def check_with_ai():
             parsed_response_1 = json.loads(completion_1.choices[0].message.content)
             return jsonify({"correct": parsed_response_1["correct"], "feedback": parsed_response_1.get("feedback") or ""})
         else:
-            return jsonify({"correct": parsed_response_0["correct"], "feedback": parsed_response_0.get("feedback") or ""})
+            # marks only come from the grader of a drawn answer, to be drawn on the student's board
+            marks = parsed_response_0.get("marks")
+            if parsed_response_0["correct"] or not isinstance(marks, list):
+                marks = []
+            return jsonify({"correct": parsed_response_0["correct"], "feedback": parsed_response_0.get("feedback") or "", "marks": marks[:4]})
     except json.JSONDecodeError:
         return jsonify({"error": "Invalid JSON response from AI"})
 

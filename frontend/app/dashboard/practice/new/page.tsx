@@ -1,11 +1,20 @@
 "use client";
 import { createNewCourse } from "./actions";
-import { useState, useRef } from "react";
+import { use, useState, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FiArrowLeft } from "react-icons/fi";
 
-export default function CreateCoursePage() {
+export default function CreateCoursePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ from?: string }>;
+}) {
+  // the list of courses to go back to: the one for flashcards or the one for tests
+  const coursesHref =
+    use(searchParams).from === "memory"
+      ? "/dashboard/memory"
+      : "/dashboard/practice";
   const router = useRouter();
   const [urlInput, setUrlInput] = useState("");
   const [urls, setUrls] = useState<string[]>([]);
@@ -20,7 +29,7 @@ export default function CreateCoursePage() {
     const formData = new FormData(e.currentTarget);
     try {
       await createNewCourse(formData);
-      router.push("/dashboard/practice");
+      router.push(coursesHref);
     } catch (error) {
       console.error(error);
     }
@@ -53,7 +62,7 @@ export default function CreateCoursePage() {
           </p>
         </div>
         <Link
-          href="/dashboard/practice"
+          href={coursesHref}
           className="flex items-center text-default font-medium gap-2 hover:opacity-80"
         >
           <FiArrowLeft size={25} />

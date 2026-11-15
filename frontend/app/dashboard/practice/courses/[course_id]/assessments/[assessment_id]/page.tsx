@@ -1,6 +1,11 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { sendCheckWithAI, getQuestions, getAssessment } from "./actions";
+import {
+  sendCheckWithAI,
+  saveDrawing,
+  getQuestions,
+  getAssessment,
+} from "./actions";
 import { useParams } from "next/navigation";
 import { Database } from "@/utils/supabase/database.types";
 import { DropdownMenu, RadioGroup, Button, Tooltip } from "@radix-ui/themes";
@@ -255,8 +260,10 @@ export default function AssessmentPage() {
   // sets the answer of the current question
   const setAnswer = (value: string) => {
     setCurrentAnswer(value);
-    setQuestions(
-      questions?.map((questionItem) =>
+    // from the latest questions: the board also reports the grader's marks,
+    // right as the result of a check is being stored
+    setQuestions((latest) =>
+      latest?.map((questionItem) =>
         questionItem.id == currentQuestionData?.id
           ? { ...questionItem, given_answer: value }
           : questionItem
@@ -316,6 +323,13 @@ export default function AssessmentPage() {
           : data.feedback;
         // its own message, even right after another one from the assistant
         setCurrentQuestionChat((prev) => prev + ASSISTANT_BREAK + feedback);
+      }
+      // on a drawn answer it can also mark where the work went wrong
+      if (!data.correct && data.marks?.length) {
+        const drawing = boardRef.current?.annotate(data.marks);
+        if (drawing) {
+          saveDrawing({ questionId: question.id, canvasPath: drawing });
+        }
       }
       setIsCheckingWithAI(false);
     });

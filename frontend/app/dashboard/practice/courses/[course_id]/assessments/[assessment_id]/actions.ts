@@ -119,9 +119,25 @@ export async function sendCheckWithAI({
 
   console.log(questionId);
 
-  // feedback is an optional note from the grader on where the answer went wrong
+  // feedback is an optional note from the grader on where the answer went wrong,
+  // and marks what it wants drawn on a drawn answer to point at the mistakes
   return {
     correct: res.correct,
     feedback: typeof res.feedback === "string" ? res.feedback.trim() : "",
+    marks: Array.isArray(res.marks) ? (res.marks as unknown[]) : [],
   };
+}
+
+// Saves a drawn answer again after the grader's marks were added to it.
+export async function saveDrawing({
+  questionId,
+  canvasPath,
+}: {
+  questionId: number;
+  canvasPath: string;
+}) {
+  await supabase
+    .from("questions")
+    .update({ given_answer: canvasPath })
+    .eq("id", questionId);
 }

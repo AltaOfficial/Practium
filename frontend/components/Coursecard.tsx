@@ -8,6 +8,8 @@ type CourseCardProps = {
   testsGenerated: number;
   lastAccessed: string;
   href: string;
+  // what the number counts, when it is not tests (for example "decks")
+  countLabel?: string;
   // opens the context of the class (notes, example material, memory)
   onContextClick?: () => void;
 }
@@ -17,6 +19,7 @@ export default function CourseCard({
   testsGenerated,
   lastAccessed,
   href,
+  countLabel = "tests generated",
   onContextClick
 }: CourseCardProps) {
   return (
@@ -54,7 +57,7 @@ export default function CourseCard({
         </div>
         <div className="flex items-center justify-between text-sm text-gray-500 gap-4 mt-auto">
           <div className="flex font-medium items-center gap-1.5 ">
-            <span>{testsGenerated} tests generated</span>
+            <span>{testsGenerated} {countLabel}</span>
           </div>
           <div className="flex font-medium items-center gap-1.5">
             <FaRegClock />

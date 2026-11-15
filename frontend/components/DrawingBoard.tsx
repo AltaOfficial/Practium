@@ -23,6 +23,7 @@ import {
   FaTrash,
   FaUndo,
 } from "react-icons/fa";
+import { buildMarkPaths, MARK_COLOR, Region } from "./boardMarks";
 
 // The drawable area is a fixed size, larger than what is shown, so there is
 // room to scroll around. Paths are stored in these pixel coordinates.
@@ -48,8 +49,13 @@ type Tool = "pen" | "eraser" | "pan";
 export interface DrawingBoardRef {
   // replaces whatever is on the board; also drops the undo history
   load: (paths: CanvasPath[]) => void;
-  // a JPEG data URL of the drawing, cropped to what was drawn
+  // a JPEG data URL of the student's drawing (without the grader's marks),
+  // cropped to what was drawn
   exportImage: () => Promise<string>;
+  // Draws the grader's marks on the board, in place of any earlier ones. Their
+  // positions are relative to the last exported image. Returns the board's
+  // paths as JSON with the marks added, or null when nothing was drawn.
+  annotate: (marks: unknown) => string | null;
 }
 
 interface DrawingBoardProps {
@@ -59,14 +65,14 @@ interface DrawingBoardProps {
   fullscreenHeader?: ReactNode;
 }
 
-// The region that was drawn on, so the exported image isn't mostly empty board.
-function drawnRegion(paths: CanvasPath[]) {
+// The region the student drew on, so the exported image isn't mostly empty board.
+function drawnRegion(paths: CanvasPath[]): Region {
   let minX = Infinity;
   let minY = Infinity;
   let maxX = -Infinity;
   let maxY = -Infinity;
   for (const path of paths) {
-    if (!path.drawMode) continue;
+    if (!path.drawMode || path.strokeColor === MARK_COLOR) continue;
     for (const point of path.paths) {
       minX = Math.min(minX, point.x - path.strokeWidth);
       minY = Math.min(minY, point.y - path.strokeWidth);
@@ -134,6 +140,9 @@ const DrawingBoard = forwardRef<DrawingBoardRef, DrawingBoardProps>(
     const canvasRef = useRef<ReactSketchCanvasRef>(null);
     const viewportRef = useRef<HTMLDivElement>(null);
     const pathsRef = useRef<CanvasPath[]>([]);
+    // the part of the board the last exported image showed, which is what the
+    // grader's marks are positioned against
+    const exportedRegion = useRef<Region | null>(null);
     // set by undo/redo/clear, which don't end with a stroke to report
     const notifyOnNextChange = useRef(false);
     const panStart = useRef<{
@@ -165,13 +174,24 @@ const DrawingBoard = forwardRef<DrawingBoardRef, DrawingBoardProps>(
 
     useImperativeHandle(ref, () => ({
       load: (paths) => {
+        // marks for the drawing that was here don't belong on this one
+        exportedRegion.current = null;
         canvasRef.current?.resetCanvas();
         canvasRef.current?.loadPaths(paths);
         viewportRef.current?.scrollTo({ left: 0, top: 0 });
       },
       exportImage: async () => {
-        const svg = await canvasRef.current?.exportSvg();
+        let svg = await canvasRef.current?.exportSvg();
         if (!svg) throw new Error("Drawing board is not ready");
+
+        // the grader should see the student's work, not its own earlier marks
+        const parsed = new DOMParser().parseFromString(svg, "image/svg+xml");
+        if (!parsed.querySelector("parsererror")) {
+          parsed
+            .querySelectorAll(`[stroke="${MARK_COLOR}"]`)
+            .forEach((mark) => mark.remove());
+          svg = new XMLSerializer().serializeToString(parsed);
+        }
 
         const image = new window.Image();
         await new Promise<void>((resolve, reject) => {
@@ -183,6 +203,7 @@ const DrawingBoard = forwardRef<DrawingBoardRef, DrawingBoardProps>(
         });
 
         const region = drawnRegion(pathsRef.current);
+        exportedRegion.current = region;
         const scale = Math.min(
           1,
           MAX_EXPORT_SIDE / Math.max(region.width, region.height)
@@ -206,6 +227,30 @@ const DrawingBoard = forwardRef<DrawingBoardRef, DrawingBoardProps>(
           canvas.height
         );
         return canvas.toDataURL("image/jpeg");
+      },
+      annotate: (marks) => {
+        const region = exportedRegion.current;
+        if (!region) return null;
+        const kept = pathsRef.current.filter(
+          (path) => path.strokeColor !== MARK_COLOR
+        );
+        const added = buildMarkPaths(
+          marks,
+          region,
+          { width: BOARD_WIDTH, height: BOARD_HEIGHT },
+          kept
+        );
+        if (added.length === 0) return null;
+
+        notifyOnNextChange.current = true;
+        if (kept.length === pathsRef.current.length) {
+          canvasRef.current?.loadPaths(added);
+        } else {
+          // earlier marks can only be taken off by loading the board again
+          canvasRef.current?.resetCanvas();
+          canvasRef.current?.loadPaths([...kept, ...added]);
+        }
+        return JSON.stringify([...kept, ...added]);
       },
     }));
 
