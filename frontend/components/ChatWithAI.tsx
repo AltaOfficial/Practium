@@ -5,6 +5,50 @@ import rehypeKatex from "rehype-katex";
 import remarkMath from "remark-math";
 import "katex/dist/katex.min.css";
 
+// The chat is stored as one string; user messages are wrapped in these
+// markers and everything outside them is assistant output.
+const USER_START = "\u0001";
+const USER_END = "\u0002";
+
+// Stream chunks are JSON-encoded strings. Fall back to the raw text if the
+// backend is still sending the old unencoded format.
+export function parseStreamChunk(data: string): string {
+  try {
+    const parsed = JSON.parse(data);
+    return typeof parsed === "string" ? parsed : data;
+  } catch {
+    return data;
+  }
+}
+
+type ChatMessage ={ role: "user" | "assistant"; content: string };
+
+function parseChat(chat: string): ChatMessage[] {
+  const messages: ChatMessage[] = [];
+  chat.split(USER_START).forEach((part, i) => {
+    let assistantText = part;
+    if (i > 0) {
+      const end = part.indexOf(USER_END);
+      const userText = end === -1 ? part : part.slice(0, end);
+      assistantText = end === -1 ? "" : part.slice(end + USER_END.length);
+      if (userText.trim()) messages.push({ role: "user", content: userText });
+    }
+    if (assistantText.trim()) {
+      messages.push({ role: "assistant", content: assistantText.trim() });
+    }
+  });
+  return messages;
+}
+
+// Normalise LaTeX delimiters for remark-math: \( \) -> $ $, and \[ \] / $$ $$
+// -> display math on its own lines.
+function formatMath(text: string) {
+  return text
+    .replace(/\\\[([\s\S]*?)\\\]/g, (_, math) => "$$" + math + "$$")
+    .replace(/\\\(([\s\S]*?)\\\)/g, (_, math) => "$" + math.trim() + "$")
+    .replace(/\$\$([\s\S]*?)\$\$/g, (_, math) => "\n\n$$\n" + math.trim() + "\n$$\n\n");
+}
+
 export default function ChatWithAI({
   currentQuestionChat,
   setCurrentQuestionChat,
@@ -28,33 +72,17 @@ export default function ChatWithAI({
     scrollToBottom();
   }, [currentQuestionChat]);
 
+  const chatMessages = parseChat(currentQuestionChat);
+
   const sendMessage = () => {
-    if (!messageInput.trim()) return;
+    const text = messageInput.trim();
+    if (!text) return;
 
     // Add user message to the chat immediately
-    setCurrentQuestionChat((prev) => prev + `User: ${messageInput.trim()}\n\n`);
+    setCurrentQuestionChat((prev) => prev + USER_START + text + USER_END);
 
-    // Create messages array from existing chat
-    const messages = [];
-
-    // Split existing chat by <br><br> to separate messages
-    if (currentQuestionChat) {
-      const chatParts = currentQuestionChat.split("<br><br>");
-
-      chatParts.forEach((part) => {
-        if (part.trim()) {
-          messages.push({
-            role: "user",
-            content: part.trim(),
-          });
-        }
-      });
-    }
-
-    messages.push({
-      role: "user",
-      content: `${messageInput.trim()}`,
-    });
+    // Send the prior conversation with the correct roles, plus the new message
+    const messages = [...chatMessages, { role: "user", content: text }];
 
     const eventStream = new EventSource(
       `${process.env.NODE_ENV == "production" ? process.env.NEXT_PUBLIC_BACKEND_URL : "http://localhost:8000"}/ask?messages=${encodeURIComponent(
@@ -67,7 +95,9 @@ export default function ChatWithAI({
         eventStream.close();
         return;
       }
-      setCurrentQuestionChat((prev) => prev + e.data);
+      // Chunks are JSON-encoded so newlines survive the event stream
+      const chunk = parseStreamChunk(e.data);
+      setCurrentQuestionChat((prev) => prev + chunk);
     };
     eventStream.onerror = (e) => {
       console.error(e);
@@ -76,47 +106,6 @@ export default function ChatWithAI({
 
     // Clear input after sending
     setMessageInput("");
-  };
-
-  // Function to convert LaTeX delimiters to KaTeX format
-  const convertMathDelimiters = (text: string) => {
-    return text
-      .replace(/\\\(/g, '$')
-      .replace(/\\\)/g, '$')
-      .replace(/\\\[/g, '$$')
-      .replace(/\\\]/g, '$$');
-  };
-
-  // Function to replace "---" with markdown horizontal rule
-  const replaceHorizontalRule = (text: string) => {
-    return text.replace(/---/g, '\n---\n');
-  };
-
-  const convertNewlines = (text: string) => {
-    // Replace single newlines not already part of a double newline
-    return text.replace(/([^\n])\n([^\n])/g, '$1\n\n$2');
-  };
-
-  const fixMathDelimiters = (text: string) => {
-    // 1. Ensure $$...$$ is on its own line (for block math)
-    text = text.replace(/\$\$([\s\S]*?)\$\$/g, '\n$$$1$$\n');
-
-    // 2. Convert \[...\] to $$...$$
-    text = text.replace(/\\\[([\s\S]*?)\\\]/g, '\n$$$1$$\n');
-
-    // 3. Remove any double $$ at the start or end of a line (if not needed)
-    text = text.replace(/([^\n])\$\$/g, '$1\n$$');
-    text = text.replace(/\$\$([^\n])/g, '$$\n$1');
-
-    return text;
-  };
-
-  const fixSingleCharLines = (text: string) => {
-    // This regex matches blocks of 5+ lines where each line is 1-2 characters (including whitespace)
-    return text.replace(/((?:^[^\S\r\n]*\S[^\S\r\n]*\r?\n){5,})/gm, (block) => {
-      // Remove newlines and join the characters
-      return block.replace(/\r?\n/g, '');
-    });
   };
 
   return (
@@ -133,40 +122,42 @@ export default function ChatWithAI({
       </div>
       <div className="bg-white h-[79vh] text-black flex flex-col rounded-lg items-end p-3 relative">
         <div className="flex-1 w-full overflow-y-auto" ref={chatContainerRef}>
-          <div className="w-full">
-            <ReactMarkdown
-              remarkPlugins={[remarkMath]}
-              rehypePlugins={[rehypeKatex]}
-              components={{
-                p: ({ children }) => {
-                  const content = typeof children === "string" ? children : "";
-                  if (
-                    content.startsWith("User:") ||
-                    content.startsWith("Assistant:")
-                  ) {
-                    return <div className="mt-4 mb-6">{children}</div>;
-                  }
-                  return <p>{children}</p>;
-                },
-                hr: () => <hr className="my-4 border-t border-gray-700" />,
-                h1: ({ children }) => <h1 className="text-xl mt-6 mb-4">{children}</h1>,
-                h2: ({ children }) => <h2 className="text-lg mt-5 mb-3">{children}</h2>,
-                h3: ({ children }) => <h3 className="text-base mt-4 mb-2">{children}</h3>,
-                h4: ({ children }) => <h4 className="text-sm mt-3 mb-2">{children}</h4>,
-                h5: ({ children }) => <h5 className="text-xs mt-2 mb-1">{children}</h5>,
-                h6: ({ children }) => <h6 className="text-xs mt-2 mb-1">{children}</h6>,
-              }}
-            >
-              {replaceHorizontalRule(
-                convertMathDelimiters(
-                  fixMathDelimiters(
-                    convertNewlines(
-                      fixSingleCharLines(currentQuestionChat)
-                    )
-                  )
-                )
-              )}
-            </ReactMarkdown>
+          <div className="w-full flex flex-col gap-4 pr-1">
+            {chatMessages.map((message, i) =>
+              message.role === "user" ? (
+                <div
+                  key={i}
+                  className="self-end max-w-[80%] bg-[#333333] text-white rounded-lg px-4 py-2 whitespace-pre-wrap break-words"
+                >
+                  {message.content}
+                </div>
+              ) : (
+                <div
+                  key={i}
+                  className="self-start w-full bg-gray-100 rounded-lg px-4 py-3 leading-relaxed overflow-x-auto"
+                >
+                  <ReactMarkdown
+                    remarkPlugins={[remarkMath]}
+                    rehypePlugins={[rehypeKatex]}
+                    components={{
+                      p: ({ children }) => <p className="my-3 first:mt-0 last:mb-0">{children}</p>,
+                      ul: ({ children }) => <ul className="list-disc pl-6 my-3 space-y-1">{children}</ul>,
+                      ol: ({ children }) => <ol className="list-decimal pl-6 my-3 space-y-1">{children}</ol>,
+                      strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+                      hr: () => <hr className="my-4 border-t border-gray-300" />,
+                      h1: ({ children }) => <h1 className="text-xl font-semibold mt-5 mb-3 first:mt-0">{children}</h1>,
+                      h2: ({ children }) => <h2 className="text-lg font-semibold mt-5 mb-3 first:mt-0">{children}</h2>,
+                      h3: ({ children }) => <h3 className="text-base font-semibold mt-4 mb-2 first:mt-0">{children}</h3>,
+                      h4: ({ children }) => <h4 className="text-sm font-semibold mt-3 mb-2 first:mt-0">{children}</h4>,
+                      h5: ({ children }) => <h5 className="text-sm font-semibold mt-2 mb-1 first:mt-0">{children}</h5>,
+                      h6: ({ children }) => <h6 className="text-sm font-semibold mt-2 mb-1 first:mt-0">{children}</h6>,
+                    }}
+                  >
+                    {formatMath(message.content)}
+                  </ReactMarkdown>
+                </div>
+              )
+            )}
           </div>
         </div>
         <div className="flex w-full place-self-end mt-4">

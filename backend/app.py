@@ -124,7 +124,7 @@ def generate_assessment():
 
     completion = chatgpt_client.chat.completions.create(
         model="gpt-5.6-luna",
-        reasoning_effort="low",
+        reasoning_effort="xhigh",
         response_format={ "type": "json_object" },
         messages=input_messages
     )
@@ -371,8 +371,11 @@ def explain_problem():
                 {"role": "system", "content": (
                     """You are an AI assistant providing educational explanations.
 
-                    For math expressions, use the following format:
+                    Format your response in Markdown, with short paragraphs and numbered steps.
 
+                    For math expressions, use the following format:
+                    - For inline math: $1.45 \\times 10^{-2}$
+                    - For display math: $$1.45 \\times 10^{-2}$$
                     """
                 )},
                 {"role": "user", "content": f"""Explain how to solve this problem in detail:\n\n{problem}
@@ -383,7 +386,8 @@ def explain_problem():
 
         for chunk in stream:
             if chunk.choices[0].delta.content is not None:
-                yield f"data: {chunk.choices[0].delta.content}\n\n"
+                # JSON-encode so newlines in the chunk don't break SSE framing
+                yield f"data: {json.dumps(chunk.choices[0].delta.content)}\n\n"
         
         yield "data: [DONE]\n\n"
 
@@ -424,7 +428,8 @@ def explain_wrong_answer():
 
         for chunk in stream:
             if chunk.choices[0].delta.content is not None:
-                yield f"data: {chunk.choices[0].delta.content}\n\n"
+                # JSON-encode so newlines in the chunk don't break SSE framing
+                yield f"data: {json.dumps(chunk.choices[0].delta.content)}\n\n"
         
         yield "data: [DONE]\n\n"
 
@@ -444,9 +449,11 @@ def ask_ai():
         system_message = {
             "role": "system",
             "content": """
+            Format your response in Markdown, with short paragraphs and numbered steps where helpful.
+
             For math expressions, use the following format:
-            - For inline math: $1.45 \times 10^{-2}$
-            - For display math: $$1.45 \times 10^{-2}$$
+            - For inline math: $1.45 \\times 10^{-2}$
+            - For display math: $$1.45 \\times 10^{-2}$$
             """
         }
         messages.insert(0, system_message)
@@ -464,7 +471,8 @@ def ask_ai():
         for chunk in stream:
             if chunk.choices[0].delta.content is not None:
                 print(chunk.choices[0].delta.content)
-                yield f"data: {chunk.choices[0].delta.content}\n\n"
+                # JSON-encode so newlines in the chunk don't break SSE framing
+                yield f"data: {json.dumps(chunk.choices[0].delta.content)}\n\n"
         
         yield "data: [DONE]\n\n"
     

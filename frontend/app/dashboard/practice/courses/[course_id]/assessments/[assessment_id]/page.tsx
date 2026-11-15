@@ -13,7 +13,7 @@ import {
 } from "react-icons/fi";
 import { FaRedo } from "react-icons/fa";
 import { MathJax } from "better-react-mathjax";
-import ChatWithAI from "@/components/ChatWithAI";
+import ChatWithAI, { parseStreamChunk } from "@/components/ChatWithAI";
 import Image from "next/image";
 import { ReactSketchCanvas, ReactSketchCanvasRef } from "react-sketch-canvas";
 
@@ -468,11 +468,9 @@ export default function AssessmentPage() {
                             eventStream.close();
                             return;
                           }
-                          if (e.data === "  ") {
-                            setCurrentQuestionChat((prev) => prev + "\n\n");
-                          } else {
-                            setCurrentQuestionChat((prev) => prev + e.data);
-                          }
+                          // Chunks are JSON-encoded so newlines survive the event stream
+                          const chunk = parseStreamChunk(e.data);
+                          setCurrentQuestionChat((prev) => prev + chunk);
                         };
                         eventStream.onerror = (e) => {
                           console.error(e);
