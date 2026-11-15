@@ -43,11 +43,25 @@ function parseChat(chat: string): ChatMessage[] {
 
 // Normalise LaTeX delimiters for remark-math: \( \) -> $ $, and \[ \] / $$ $$
 // -> display math on its own lines.
+// The markdown math parser ends a formula at an escaped dollar sign (\$), so
+// escaped dollars inside math are rewritten to a KaTeX command without "$".
 function formatMath(text: string) {
+  const escapeDollars = (math: string) =>
+    math.replace(/\\\$/g, "\\text{\\textdollar}");
   return text
     .replace(/\\\[([\s\S]*?)\\\]/g, (_, math) => "$$" + math + "$$")
     .replace(/\\\(([\s\S]*?)\\\)/g, (_, math) => "$" + math.trim() + "$")
-    .replace(/\$\$([\s\S]*?)\$\$/g, (_, math) => "\n\n$$\n" + math.trim() + "\n$$\n\n");
+    .replace(
+      // escaped dollar outside math | $$display$$ | $inline$
+      /\\\$|\$\$((?:\\[\s\S]|[^\\])*?)\$\$|\$((?:\\[\s\S]|[^$\\\n])+)\$/g,
+      (match, display, inline) => {
+        if (display !== undefined) {
+          return "\n\n$$\n" + escapeDollars(display.trim()) + "\n$$\n\n";
+        }
+        if (inline !== undefined) return "$" + escapeDollars(inline) + "$";
+        return match;
+      }
+    );
 }
 
 export default function ChatWithAI({
