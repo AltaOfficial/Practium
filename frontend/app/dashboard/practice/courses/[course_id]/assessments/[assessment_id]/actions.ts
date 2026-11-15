@@ -111,5 +111,9 @@ export async function sendCheckWithAI({
 
   console.log(questionId);
 
-  return { correct: res.correct };
+  // feedback is an optional note from the grader on where the answer went wrong
+  return {
+    correct: res.correct,
+    feedback: typeof res.feedback === "string" ? res.feedback.trim() : "",
+  };
 }

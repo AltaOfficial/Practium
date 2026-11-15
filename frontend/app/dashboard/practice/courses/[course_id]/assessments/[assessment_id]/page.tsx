@@ -23,6 +23,7 @@ import ChatWithAI, {
   parseStreamChunk,
   USER_START,
   USER_END,
+  ASSISTANT_BREAK,
 } from "@/components/ChatWithAI";
 import Image from "next/image";
 import DrawingBoard, { DrawingBoardRef } from "@/components/DrawingBoard";
@@ -289,6 +290,14 @@ export default function AssessmentPage() {
           return questionItem;
         })
       );
+      // the grader sometimes says where a wrong answer went wrong; show it in the chat
+      if (!data.correct && data.feedback) {
+        const feedback = isMultiPart
+          ? `**Part (${partLabel(currentPart)}):** ${data.feedback}`
+          : data.feedback;
+        // its own message, even right after another one from the assistant
+        setCurrentQuestionChat((prev) => prev + ASSISTANT_BREAK + feedback);
+      }
       setIsCheckingWithAI(false);
     });
   }

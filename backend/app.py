@@ -259,6 +259,7 @@ async def check_with_ai():
                 Response format (JSON only):
                 {{
                     "explanation": (string), # explanation of why it is incorrect, not how to do it, just why it is incorrect.
+                    "feedback": (string), # OPTIONAL note shown to the student in their tutor chat. Write one only when the answer is incorrect AND you can point at the specific step, mistake or misconception where they went wrong. One to three sentences, addressed to the student, saying where it went wrong without giving away the correct answer. Markdown, with math as $...$. Use "" when the answer is correct or there is nothing specific to point at (for example a wrong choice with no working shown).
                     "correct": (1 or 0) # 1 if the answer is correct, 0 if the answer is incorrect
                 }}
 
@@ -304,6 +305,7 @@ async def check_with_ai():
                 {{
                     "code": (string), # python code to check if the answer is correct, if python code is not needed, return ""
                     "explanation": (string), # explanation of why it is incorrect, not how to do it, just why it is incorrect.
+                    "feedback": (string), # OPTIONAL note shown to the student in their tutor chat. Write one only when the answer is incorrect AND you can point at the specific step, mistake or misconception where they went wrong. One to three sentences, addressed to the student, saying where it went wrong without giving away the correct answer. Markdown, with math as $...$. Use "" when the answer is correct or there is nothing specific to point at (for example a wrong choice with no working shown).
                     "correct": (1 or 0) # 1 if the answer is correct, 0 if the answer is incorrect
                 }}
 
@@ -381,6 +383,7 @@ async def check_with_ai():
                 Response format (JSON only):
                 {{
                     "explanation": (string), # explanation of why it is incorrect, not how to do it, just why it is incorrect.
+                    "feedback": (string), # OPTIONAL note shown to the student in their tutor chat. Write one only when the answer is incorrect AND you can point at the specific step, mistake or misconception where they went wrong. One to three sentences, addressed to the student, saying where it went wrong without giving away the correct answer. Markdown, with math as $...$. Use "" when the answer is correct or there is nothing specific to point at (for example a wrong choice with no working shown).
                     "correct": (1 or 0) # 1 if the answer is correct, 0 if the answer is incorrect
                 }}
 
@@ -397,9 +400,10 @@ async def check_with_ai():
             )
             messages.append(completion_1.choices[0].message.content)
             print(messages)
-            return jsonify({"correct": json.loads(completion_1.choices[0].message.content)["correct"]})
+            parsed_response_1 = json.loads(completion_1.choices[0].message.content)
+            return jsonify({"correct": parsed_response_1["correct"], "feedback": parsed_response_1.get("feedback") or ""})
         else:
-            return jsonify({"correct": parsed_response_0["correct"]})
+            return jsonify({"correct": parsed_response_0["correct"], "feedback": parsed_response_0.get("feedback") or ""})
     except json.JSONDecodeError:
         return jsonify({"error": "Invalid JSON response from AI"})
 
@@ -498,6 +502,14 @@ def ask_ai():
         system_message = {
             "role": "system",
             "content": """
+            You are a tutor chatting with a student while they practice. Help them get to the answer themselves.
+
+            - Respond to what the student actually said. A greeting or small talk gets a short, friendly reply and an offer to help, not a walkthrough of the question.
+            - Do not solve the question or state its answer unless the student clearly asks for the full solution or the answer.
+            - When they ask for help, give the smallest useful nudge: a hint, the next step, or a question that points them at it. Then let them try.
+            - If they show their work or a wrong answer, point at where it went wrong rather than redoing the whole problem.
+            - Keep replies short.
+
             Format your response in Markdown, with short paragraphs and numbered steps where helpful.
 
             For math expressions, use the following format:

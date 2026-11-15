@@ -10,6 +10,8 @@ import "katex/dist/katex.min.css";
 // markers and everything outside them is assistant output.
 export const USER_START = "\u0001";
 export const USER_END = "\u0002";
+// starts a new assistant message when the assistant was already the last to speak
+export const ASSISTANT_BREAK = "\u0003";
 
 // Stream chunks are JSON-encoded strings. Fall back to the raw text if the
 // backend is still sending the old unencoded format.
@@ -34,8 +36,10 @@ function parseChat(chat: string): ChatMessage[] {
       assistantText = end === -1 ? "" : part.slice(end + USER_END.length);
       if (userText.trim()) messages.push({ role: "user", content: userText });
     }
-    if (assistantText.trim()) {
-      messages.push({ role: "assistant", content: assistantText.trim() });
+    for (const text of assistantText.split(ASSISTANT_BREAK)) {
+      if (text.trim()) {
+        messages.push({ role: "assistant", content: text.trim() });
+      }
     }
   });
   return messages;

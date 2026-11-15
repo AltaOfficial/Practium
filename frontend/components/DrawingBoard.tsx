@@ -89,16 +89,38 @@ function drawnRegion(paths: CanvasPath[]) {
   };
 }
 
-// A stylus asking to erase: its eraser end / eraser button (button 5), or its
-// side (barrel) button, which is how some pens report theirs.
+// A stylus touching the board and asking to erase: its eraser end / eraser
+// button (32), or its side (barrel) button (2).
 function isPenEraser(event: PointerEvent) {
-  return (
-    event.pointerType === "pen" &&
-    (event.button === 5 ||
-      event.button === 2 ||
-      (event.buttons & 32) !== 0 ||
-      (event.buttons & 2) !== 0)
-  );
+  return event.pointerType === "pen" && (event.buttons & (32 | 2)) !== 0;
+}
+
+// The same for a stylus hovering above the board. Any held button counts:
+// nothing is touching, so it can only be a button on the pen. Chrome on
+// Android reports the Samsung S Pen's side button as the primary button (1),
+// and only while hovering; once the pen touches, the button isn't reported.
+function isHoveringPenEraser(event: PointerEvent) {
+  return event.pointerType === "pen" && (event.buttons & (32 | 2 | 1)) !== 0;
+}
+
+// A copy of a pointer event that can be dispatched again.
+function clonePointerEvent(type: string, event: PointerEvent) {
+  return new PointerEvent(type, {
+    bubbles: true,
+    cancelable: true,
+    composed: true,
+    view: window,
+    pointerId: event.pointerId,
+    pointerType: event.pointerType,
+    isPrimary: event.isPrimary,
+    button: event.button,
+    buttons: event.buttons,
+    clientX: event.clientX,
+    clientY: event.clientY,
+    screenX: event.screenX,
+    screenY: event.screenY,
+    pressure: event.pressure,
+  });
 }
 
 const toolButton = (active: boolean) =>
@@ -126,6 +148,11 @@ const DrawingBoard = forwardRef<DrawingBoardRef, DrawingBoardProps>(
     // erasing for one stroke because the stylus's eraser button is held
     const [penErasing, setPenErasing] = useState(false);
     const redispatching = useRef(false);
+    // whether a stylus is touching the screen right now
+    const penDown = useRef(false);
+    // the eraser was switched on by a hovering pen, which is also what
+    // switches it off again (the button can't be seen while the pen is down)
+    const eraseFromHover = useRef(false);
     const erasing = tool === "eraser" || penErasing;
 
     const notify = () => {
@@ -183,17 +210,57 @@ const DrawingBoard = forwardRef<DrawingBoardRef, DrawingBoardProps>(
       canvasRef.current?.eraseMode(erasing);
     }, [erasing]);
 
-    // the stylus eraser only lasts until the pen is lifted
+    // track the stylus touching and lifting, wherever on the page it happens
     useEffect(() => {
-      if (!penErasing) return;
-      const stop = () => setPenErasing(false);
-      document.addEventListener("pointerup", stop);
-      document.addEventListener("pointercancel", stop);
-      return () => {
-        document.removeEventListener("pointerup", stop);
-        document.removeEventListener("pointercancel", stop);
+      const onDown = (event: PointerEvent) => {
+        // ignore the events this component dispatches itself
+        if (redispatching.current) return;
+        if (event.pointerType === "pen") {
+          penDown.current = true;
+        } else {
+          // a finger or mouse took over: the pen's button no longer applies
+          eraseFromHover.current = false;
+          setPenErasing(false);
+        }
       };
-    }, [penErasing]);
+      const onLift = (event: PointerEvent) => {
+        if (redispatching.current || event.pointerType !== "pen") return;
+        penDown.current = false;
+        // without hover to say the button was released, the eraser only
+        // lasts until the pen is lifted
+        if (!eraseFromHover.current) setPenErasing(false);
+      };
+      document.addEventListener("pointerdown", onDown, true);
+      document.addEventListener("pointerup", onLift);
+      document.addEventListener("pointercancel", onLift);
+      return () => {
+        document.removeEventListener("pointerdown", onDown, true);
+        document.removeEventListener("pointerup", onLift);
+        document.removeEventListener("pointercancel", onLift);
+      };
+    }, []);
+
+    // Starts an eraser stroke for a stylus whose eraser button is held. The
+    // canvas decides pen vs eraser when a stroke starts, so switch it to the
+    // eraser first and then hand it the pointer-down again. When the button
+    // is pressed part-way through a stroke, that stroke is ended first.
+    const startPenErase = (native: PointerEvent, midStroke: boolean) => {
+      const target = native.target;
+      if (!target) return;
+      redispatching.current = true;
+      try {
+        if (midStroke) {
+          target.dispatchEvent(clonePointerEvent("pointerup", native));
+        }
+        flushSync(() => {
+          setPenErasing(true);
+          canvasRef.current?.eraseMode(true);
+        });
+        target.dispatchEvent(clonePointerEvent("pointerdown", native));
+      } finally {
+        redispatching.current = false;
+      }
+    };
 
     // while full screen: Escape leaves it, and the page behind doesn't scroll
     useEffect(() => {
@@ -328,35 +395,28 @@ const DrawingBoard = forwardRef<DrawingBoardRef, DrawingBoardProps>(
             ) {
               return;
             }
-            // The canvas decides pen vs eraser when the stroke starts, so
-            // switch to the eraser first and then hand it the event again.
             event.stopPropagation();
-            flushSync(() => {
-              setPenErasing(true);
-              canvasRef.current?.eraseMode(true);
-            });
-            redispatching.current = true;
-            try {
-              native.target?.dispatchEvent(
-                new PointerEvent("pointerdown", {
-                  bubbles: true,
-                  cancelable: true,
-                  composed: true,
-                  view: window,
-                  pointerId: native.pointerId,
-                  pointerType: native.pointerType,
-                  isPrimary: native.isPrimary,
-                  button: native.button,
-                  buttons: native.buttons,
-                  clientX: native.clientX,
-                  clientY: native.clientY,
-                  screenX: native.screenX,
-                  screenY: native.screenY,
-                  pressure: native.pressure,
-                })
-              );
-            } finally {
-              redispatching.current = false;
+            startPenErase(native, false);
+          }}
+          onPointerMoveCapture={(event) => {
+            const native = event.nativeEvent;
+            if (
+              redispatching.current ||
+              native.pointerType !== "pen" ||
+              tool === "pan"
+            ) {
+              return;
+            }
+            if (penDown.current) {
+              // button pressed part-way through a pen stroke
+              if (!erasing && isPenEraser(native)) startPenErase(native, true);
+              return;
+            }
+            // hovering: be erasing (or not) before the pen lands
+            const held = isHoveringPenEraser(native);
+            if (held !== eraseFromHover.current || held !== penErasing) {
+              eraseFromHover.current = held;
+              setPenErasing(held);
             }
           }}
           // a pen's side button otherwise opens the right-click menu
