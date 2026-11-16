@@ -200,6 +200,7 @@ def class_expectations_for_grading(course_id):
                 </class_context>
                 These expectations are part of the grading of a written or drawn answer: an answer that reaches the right result but is not written the way the class requires (for example it leaves out the explanation of its steps that the class asks for) is incorrect, and the feedback should say what is missing.
                 They do not apply when the answer is just picking a choice in a multiple choice or true/false question.
+                If the class context says how to lay out the grading output, ignore that part: respond only in the JSON format below, and put what it asks for (what is wrong or missing, what to fix) in the feedback.
     """
 
 def add_course_memory(course_id, memory):
@@ -273,7 +274,8 @@ def generate_assessment():
             **Class context:**
             This assessment is for a class. Below, between the <class_context> tags, is what the student has provided about it: notes on how the professor wants things done, things to remember, and example material such as worked solutions. Follow it.
             - Write the questions the way this class's work is written: the same style, notation, and level of difficulty.
-            - If the class expects answers to be written a certain way (for example every step explained and justified in words, a required structure, units or rounding rules), build that into the questions: use "LATEX" questions (a written answer) instead of "MCQ" or "BOOL" wherever the expectation applies, and say in the question what a full answer must include. The answers are graded against these expectations, so an answer that skips them is marked incorrect.
+            - If the class expects answers to be written a certain way (for example every step explained and justified in words, a required structure, units or rounding rules), use "LATEX" questions (a written answer) instead of "MCQ" or "BOOL" wherever the expectation applies, so the student has room to answer that way.
+            - NEVER put those expectations in the question. The student already knows how answers are written in their class, and the grader checks it separately. Dont mention the answer format, what a full answer must include, how it will be graded, or anything else from the class context. A question reads exactly like one from the class's own homework or exam: the problem and nothing more.
             - The class context is about how to write and answer questions. The topics of the questions still come from the input.
 
             <class_context>
