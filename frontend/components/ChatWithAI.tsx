@@ -73,7 +73,10 @@ export default function ChatWithAI({
   setCurrentQuestionChat,
   questionContext,
   courseId,
+  fill,
 }: {
+  // take the height of the container instead of a fixed one (next to the full screen board)
+  fill?: boolean;
   // the class the question belongs to: the tutor uses its context and can add to its memory
   courseId?: string;
   currentQuestionChat: string;
@@ -136,7 +139,11 @@ export default function ChatWithAI({
   };
 
   return (
-    <div className="p-3 bg-white rounded-lg flex flex-col gap-5">
+    <div
+      className={`p-3 bg-white rounded-lg flex flex-col gap-5 ${
+        fill ? "h-full border border-[#333333]" : ""
+      }`}
+    >
       <div className="h-8 flex flex-row-reverse justify-between place-items-center">
         <div className="flex flex-row-reverse gap-4">
           <button
@@ -147,7 +154,11 @@ export default function ChatWithAI({
           </button>
         </div>
       </div>
-      <div className="bg-white h-[79vh] text-black flex flex-col rounded-lg items-end p-3 relative">
+      <div
+        className={`bg-white text-black flex flex-col rounded-lg items-end p-3 relative ${
+          fill ? "flex-1 min-h-0" : "h-[79vh]"
+        }`}
+      >
         <div className="flex-1 w-full overflow-y-auto" ref={chatContainerRef}>
           <div className="w-full flex flex-col gap-4 pr-1">
             {chatMessages.map((message, i) =>
@@ -161,7 +172,7 @@ export default function ChatWithAI({
               ) : (
                 <div
                   key={i}
-                  className="self-start w-full bg-gray-100 rounded-lg px-4 py-3 leading-relaxed overflow-x-auto"
+                  className="chat-message self-start w-full min-w-0 bg-gray-100 rounded-lg px-4 py-3 leading-relaxed break-words"
                 >
                   <ReactMarkdown
                     remarkPlugins={[remarkGfm, remarkMath]}

@@ -7,7 +7,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { flushSync } from "react-dom";
 import {
   CanvasPath,
   ReactSketchCanvas,
@@ -19,6 +18,7 @@ import {
   FaExpand,
   FaPen,
   FaRedo,
+  FaRegCommentDots,
   FaRegHandPaper,
   FaTrash,
   FaUndo,
@@ -40,7 +40,9 @@ const COLORS = [
   "#9333ea", // purple
 ];
 const STROKE_WIDTH = 4;
-const ERASER_WIDTH = 20;
+// how close the eraser has to come to a stroke to take it off
+const ERASER_RADIUS = 10;
+const MAX_UNDO_STEPS = 100;
 const EXPORT_PADDING = 40;
 const MAX_EXPORT_SIDE = 2000;
 
@@ -63,6 +65,59 @@ interface DrawingBoardProps {
   onChange: (paths: string) => void;
   // shown above the board while it is full screen, e.g. the question
   fullscreenHeader?: ReactNode;
+  // can be opened next to the board while it is full screen, e.g. the tutor chat
+  fullscreenSide?: ReactNode;
+  // what fullscreenSide is, for its button ("Show chat")
+  fullscreenSideLabel?: string;
+}
+
+type Point = { x: number; y: number };
+
+function distanceToSegment(point: Point, from: Point, to: Point) {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const lengthSquared = dx * dx + dy * dy;
+  const along =
+    lengthSquared === 0
+      ? 0
+      : Math.max(
+          0,
+          Math.min(
+            1,
+            ((point.x - from.x) * dx + (point.y - from.y) * dy) / lengthSquared
+          )
+        );
+  return Math.hypot(
+    point.x - (from.x + along * dx),
+    point.y - (from.y + along * dy)
+  );
+}
+
+function segmentsCross(a: Point, b: Point, c: Point, d: Point) {
+  const side = (p: Point, q: Point, r: Point) =>
+    Math.sign((q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x));
+  return side(a, b, c) !== side(a, b, d) && side(c, d, a) !== side(c, d, b);
+}
+
+// Whether the eraser, moved from one point to another, touched a stroke.
+function eraserTouches(path: CanvasPath, from: Point, to: Point) {
+  const reach = ERASER_RADIUS + path.strokeWidth / 2;
+  const points = path.paths;
+  for (let i = 0; i < points.length; i++) {
+    const start = points[i];
+    // a stroke of one point is a dot
+    const end = points[Math.min(i + 1, points.length - 1)];
+    if (
+      segmentsCross(from, to, start, end) ||
+      distanceToSegment(from, start, end) <= reach ||
+      distanceToSegment(to, start, end) <= reach ||
+      distanceToSegment(start, from, to) <= reach ||
+      distanceToSegment(end, from, to) <= reach
+    ) {
+      return true;
+    }
+  }
+  return false;
 }
 
 // The region the student drew on, so the exported image isn't mostly empty board.
@@ -136,15 +191,31 @@ const toolButton = (active: boolean) =>
   }`;
 
 const DrawingBoard = forwardRef<DrawingBoardRef, DrawingBoardProps>(
-  function DrawingBoard({ onChange, fullscreenHeader }, ref) {
+  function DrawingBoard(
+    { onChange, fullscreenHeader, fullscreenSide, fullscreenSideLabel = "panel" },
+    ref
+  ) {
     const canvasRef = useRef<ReactSketchCanvasRef>(null);
     const viewportRef = useRef<HTMLDivElement>(null);
     const pathsRef = useRef<CanvasPath[]>([]);
     // the part of the board the last exported image showed, which is what the
     // grader's marks are positioned against
     const exportedRegion = useRef<Region | null>(null);
-    // set by undo/redo/clear, which don't end with a stroke to report
-    const notifyOnNextChange = useRef(false);
+    // the board itself, inside the scrolling viewport
+    const boardRef = useRef<HTMLDivElement>(null);
+    // The board as it was before each change, to undo it, and as it was before
+    // each undo, to redo it. Kept here because the canvas can't undo an erased stroke.
+    const undoStack = useRef<CanvasPath[][]>([]);
+    const redoStack = useRef<CanvasPath[][]>([]);
+    // the eraser being dragged over the board: where it was last, the board
+    // before it started, and whether it has taken anything off yet
+    const eraseGesture = useRef<{
+      last: Point;
+      before: CanvasPath[];
+      changed: boolean;
+    } | null>(null);
+    // the stroke that is ending was already put in the undo history
+    const strokeAlreadyInHistory = useRef(false);
     const panStart = useRef<{
       x: number;
       y: number;
@@ -155,6 +226,7 @@ const DrawingBoard = forwardRef<DrawingBoardRef, DrawingBoardProps>(
     const [tool, setTool] = useState<Tool>("pen");
     const [color, setColor] = useState(COLORS[0]);
     const [isFullscreen, setIsFullscreen] = useState(false);
+    const [isSideOpen, setIsSideOpen] = useState(false);
     // erasing for one stroke because the stylus's eraser button is held
     const [penErasing, setPenErasing] = useState(false);
     const redispatching = useRef(false);
@@ -172,12 +244,111 @@ const DrawingBoard = forwardRef<DrawingBoardRef, DrawingBoardProps>(
       onChange(paths.length > 0 ? JSON.stringify(paths) : "");
     };
 
+    // puts these paths on the board in place of what is there
+    const showPaths = (paths: CanvasPath[]) => {
+      pathsRef.current = paths;
+      canvasRef.current?.resetCanvas();
+      canvasRef.current?.loadPaths(paths);
+    };
+
+    // remembers the board as it was before a change, so the change can be undone
+    const addToHistory = (before: CanvasPath[]) => {
+      undoStack.current.push(before);
+      if (undoStack.current.length > MAX_UNDO_STEPS) undoStack.current.shift();
+      redoStack.current = [];
+    };
+
+    const undo = () => {
+      const before = undoStack.current.pop();
+      if (!before) return;
+      redoStack.current.push(pathsRef.current);
+      showPaths(before);
+      notify();
+    };
+
+    const redo = () => {
+      const after = redoStack.current.pop();
+      if (!after) return;
+      undoStack.current.push(pathsRef.current);
+      showPaths(after);
+      notify();
+    };
+
+    const clear = () => {
+      if (pathsRef.current.length === 0) return;
+      addToHistory(pathsRef.current);
+      showPaths([]);
+      notify();
+    };
+
+    // where on the board a pointer is
+    const boardPoint = (event: { clientX: number; clientY: number }): Point => {
+      const rect = boardRef.current?.getBoundingClientRect();
+      return {
+        x: event.clientX - (rect?.left ?? 0),
+        y: event.clientY - (rect?.top ?? 0),
+      };
+    };
+
+    // The eraser takes off whole strokes: every stroke it touches on its way
+    // to this point goes, in one piece.
+    const eraseTo = (point: Point) => {
+      const gesture = eraseGesture.current;
+      if (!gesture) return;
+      const kept = pathsRef.current.filter(
+        (path) => !path.drawMode || !eraserTouches(path, gesture.last, point)
+      );
+      gesture.last = point;
+      if (kept.length !== pathsRef.current.length) {
+        gesture.changed = true;
+        showPaths(kept);
+      }
+    };
+
+    const startErasing = (event: PointerEvent) => {
+      const viewport = viewportRef.current;
+      if (!viewport) return;
+      // not when the press is on the viewport's scrollbars
+      const rect = viewport.getBoundingClientRect();
+      if (
+        event.clientX - rect.left > viewport.clientWidth ||
+        event.clientY - rect.top > viewport.clientHeight
+      ) {
+        return;
+      }
+      const point = boardPoint(event);
+      eraseGesture.current = {
+        last: point,
+        before: pathsRef.current,
+        changed: false,
+      };
+      try {
+        // keep getting the pointer's moves, wherever it goes
+        viewport.setPointerCapture(event.pointerId);
+      } catch {
+        // the pointer is already gone
+      }
+      eraseTo(point);
+    };
+
+    const stopErasing = () => {
+      const gesture = eraseGesture.current;
+      if (!gesture) return;
+      eraseGesture.current = null;
+      if (gesture.changed) {
+        addToHistory(gesture.before);
+        notify();
+      }
+    };
+
     useImperativeHandle(ref, () => ({
       load: (paths) => {
         // marks for the drawing that was here don't belong on this one
         exportedRegion.current = null;
-        canvasRef.current?.resetCanvas();
-        canvasRef.current?.loadPaths(paths);
+        undoStack.current = [];
+        redoStack.current = [];
+        eraseGesture.current = null;
+        showPaths(paths);
         viewportRef.current?.scrollTo({ left: 0, top: 0 });
       },
       exportImage: async () => {
@@ -242,21 +413,11 @@ const DrawingBoard = forwardRef<DrawingBoardRef, DrawingBoardProps>(
         );
         if (added.length === 0) return null;
 
-        notifyOnNextChange.current = true;
-        if (kept.length === pathsRef.current.length) {
-          canvasRef.current?.loadPaths(added);
-        } else {
-          // earlier marks can only be taken off by loading the board again
-          canvasRef.current?.resetCanvas();
-          canvasRef.current?.loadPaths([...kept, ...added]);
-        }
+        showPaths([...kept, ...added]);
+        notify();
         return JSON.stringify([...kept, ...added]);
       },
     }));
-
-    useEffect(() => {
-      canvasRef.current?.eraseMode(erasing);
-    }, [erasing]);
 
     // track the stylus touching and lifting, wherever on the page it happens
     useEffect(() => {
@@ -288,26 +449,22 @@ const DrawingBoard = forwardRef<DrawingBoardRef, DrawingBoardProps>(
       };
     }, []);
 
-    // Starts an eraser stroke for a stylus whose eraser button is held. The
-    // canvas decides pen vs eraser when a stroke starts, so switch it to the
-    // eraser first and then hand it the pointer-down again. When the button
-    // is pressed part-way through a stroke, that stroke is ended first.
+    // Starts erasing for a stylus whose eraser button is held. When the button
+    // is pressed part-way through a pen stroke, that stroke is ended first.
     const startPenErase = (native: PointerEvent, midStroke: boolean) => {
-      const target = native.target;
-      if (!target) return;
-      redispatching.current = true;
-      try {
-        if (midStroke) {
-          target.dispatchEvent(clonePointerEvent("pointerup", native));
+      if (midStroke && native.target) {
+        // the stroke goes in the undo history now, before the eraser changes the board
+        addToHistory(pathsRef.current.slice(0, -1));
+        strokeAlreadyInHistory.current = true;
+        redispatching.current = true;
+        try {
+          native.target.dispatchEvent(clonePointerEvent("pointerup", native));
+        } finally {
+          redispatching.current = false;
         }
-        flushSync(() => {
-          setPenErasing(true);
-          canvasRef.current?.eraseMode(true);
-        });
-        target.dispatchEvent(clonePointerEvent("pointerdown", native));
-      } finally {
-        redispatching.current = false;
       }
+      setPenErasing(true);
+      startErasing(native);
     };
 
     // while full screen: Escape leaves it, and the page behind doesn't scroll
@@ -325,19 +482,15 @@ const DrawingBoard = forwardRef<DrawingBoardRef, DrawingBoardProps>(
       };
     }, [isFullscreen]);
 
-    const withNotify = (action: () => void) => () => {
-      notifyOnNextChange.current = true;
-      action();
-    };
-
     return (
       <div
         className={
           isFullscreen
-            ? "fixed inset-0 z-50 bg-white p-4 flex flex-col gap-3 select-none"
-            : "flex flex-col gap-3 select-none"
+            ? "fixed inset-0 z-50 bg-white p-4 flex gap-4 select-none"
+            : "select-none"
         }
       >
+        <div className="flex flex-col gap-3 flex-1 min-w-0 min-h-0">
         {isFullscreen && fullscreenHeader && (
           <div className="max-h-[25vh] overflow-y-auto text-[#333333] shrink-0">
             {fullscreenHeader}
@@ -397,7 +550,7 @@ const DrawingBoard = forwardRef<DrawingBoardRef, DrawingBoardProps>(
             <button
               type="button"
               title="Undo"
-              onClick={withNotify(() => canvasRef.current?.undo())}
+              onClick={undo}
               className={toolButton(false)}
             >
               <FaUndo size={13} />
@@ -405,7 +558,7 @@ const DrawingBoard = forwardRef<DrawingBoardRef, DrawingBoardProps>(
             <button
               type="button"
               title="Redo"
-              onClick={withNotify(() => canvasRef.current?.redo())}
+              onClick={redo}
               className={toolButton(false)}
             >
               <FaRedo size={13} />
@@ -413,18 +566,31 @@ const DrawingBoard = forwardRef<DrawingBoardRef, DrawingBoardProps>(
             <button
               type="button"
               title="Clear the board"
-              onClick={withNotify(() => canvasRef.current?.clearCanvas())}
+              onClick={clear}
               className={toolButton(false)}
             >
               <FaTrash size={13} />
             </button>
           </div>
 
+          {isFullscreen && fullscreenSide && (
+            <button
+              type="button"
+              title={`${isSideOpen ? "Hide" : "Show"} ${fullscreenSideLabel}`}
+              onClick={() => setIsSideOpen(!isSideOpen)}
+              className={`${toolButton(isSideOpen)} ml-auto`}
+            >
+              <FaRegCommentDots size={15} />
+            </button>
+          )}
+
           <button
             type="button"
             title={isFullscreen ? "Exit full screen (Esc)" : "Full screen"}
             onClick={() => setIsFullscreen(!isFullscreen)}
-            className={`${toolButton(false)} ml-auto`}
+            className={`${toolButton(false)} ${
+              isFullscreen && fullscreenSide ? "" : "ml-auto"
+            }`}
           >
             {isFullscreen ? <FaCompress size={14} /> : <FaExpand size={14} />}
           </button>
@@ -457,7 +623,9 @@ const DrawingBoard = forwardRef<DrawingBoardRef, DrawingBoardProps>(
             }
             if (penDown.current) {
               // button pressed part-way through a pen stroke
-              if (!erasing && isPenEraser(native)) startPenErase(native, true);
+              if (!erasing && !eraseGesture.current && isPenEraser(native)) {
+                startPenErase(native, true);
+              }
               return;
             }
             // hovering: a press of the S Pen's button switches pen <-> eraser
@@ -478,6 +646,10 @@ const DrawingBoard = forwardRef<DrawingBoardRef, DrawingBoardProps>(
           // a pen's side button otherwise opens the right-click menu
           onContextMenu={(event) => event.preventDefault()}
           onPointerDown={(event) => {
+            if (erasing && tool !== "pan") {
+              startErasing(event.nativeEvent);
+              return;
+            }
             // touch scrolls natively in pan mode
             if (tool !== "pan" || event.pointerType === "touch") return;
             const viewport = event.currentTarget;
@@ -490,6 +662,10 @@ const DrawingBoard = forwardRef<DrawingBoardRef, DrawingBoardProps>(
             viewport.setPointerCapture(event.pointerId);
           }}
           onPointerMove={(event) => {
+            if (eraseGesture.current) {
+              eraseTo(boardPoint(event));
+              return;
+            }
             if (!panStart.current) return;
             const viewport = event.currentTarget;
             viewport.scrollLeft =
@@ -498,11 +674,15 @@ const DrawingBoard = forwardRef<DrawingBoardRef, DrawingBoardProps>(
               panStart.current.top - (event.clientY - panStart.current.y);
           }}
           onPointerUp={() => {
+            stopErasing();
             panStart.current = null;
           }}
           onPointerCancel={() => {
+            stopErasing();
             panStart.current = null;
           }}
+          // while erasing, a finger dragged over the board erases instead of scrolling
+          style={erasing && tool !== "pan" ? { touchAction: "none" } : undefined}
           className={`overflow-auto overscroll-contain border border-[#333333] rounded-lg shadow-[2px_3px_0_0px_rgba(51,51,51,1)] ${
             isFullscreen
               ? "flex-1 min-h-0"
@@ -516,7 +696,9 @@ const DrawingBoard = forwardRef<DrawingBoardRef, DrawingBoardProps>(
           }`}
         >
           <div
-            className={tool === "pan" ? "pointer-events-none" : ""}
+            ref={boardRef}
+            // the canvas only gets the pointer to draw; moving around and erasing are handled here
+            className={tool === "pan" || erasing ? "pointer-events-none" : ""}
             style={{ width: BOARD_WIDTH, height: BOARD_HEIGHT }}
           >
             <ReactSketchCanvas
@@ -527,18 +709,28 @@ const DrawingBoard = forwardRef<DrawingBoardRef, DrawingBoardProps>(
               style={{ border: "none" }}
               strokeColor={color}
               strokeWidth={STROKE_WIDTH}
-              eraserWidth={ERASER_WIDTH}
               onChange={(paths) => {
                 pathsRef.current = paths;
-                if (notifyOnNextChange.current) {
-                  notifyOnNextChange.current = false;
-                  notify();
-                }
               }}
-              onStroke={notify}
+              onStroke={() => {
+                // a finished pen stroke can be undone
+                if (strokeAlreadyInHistory.current) {
+                  strokeAlreadyInHistory.current = false;
+                } else {
+                  addToHistory(pathsRef.current.slice(0, -1));
+                }
+                notify();
+              }}
             />
           </div>
         </div>
+        </div>
+
+        {isFullscreen && fullscreenSide && isSideOpen && (
+          <div className="w-[min(440px,45vw)] shrink-0 min-h-0 select-text">
+            {fullscreenSide}
+          </div>
+        )}
       </div>
     );
   }

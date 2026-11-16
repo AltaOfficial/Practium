@@ -141,3 +141,32 @@ export async function saveDrawing({
     .update({ given_answer: canvasPath })
     .eq("id", questionId);
 }
+
+// Swaps a question for a new one like it (same idea and shape, different
+// specifics). questionIds are the question's rows: one, or every part of a
+// multi-part question. Returns the rows as they are now.
+export async function getSimilarQuestion({
+  questionIds,
+  courseId,
+}: {
+  questionIds: number[];
+  courseId?: string;
+}): Promise<{ data?: Question[]; error?: string }> {
+  try {
+    const response = await fetch(`${process.env.VERCEL_ENV == "production" ? process.env.NEXT_PUBLIC_BACKEND_URL : "http://backend:8000"}/similarquestion`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ question_ids: questionIds, course_id: courseId }),
+    });
+    const res = await response.json();
+    if (!response.ok || !Array.isArray(res.questions)) {
+      return { error: res.error || "Could not make a similar question" };
+    }
+    return { data: res.questions };
+  } catch (error) {
+    console.error(error);
+    return { error: "Could not make a similar question" };
+  }
+}

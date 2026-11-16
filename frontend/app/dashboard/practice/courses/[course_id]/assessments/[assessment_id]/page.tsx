@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   sendCheckWithAI,
   saveDrawing,
+  getSimilarQuestion,
   getQuestions,
   getAssessment,
 } from "./actions";
@@ -158,6 +159,7 @@ export default function AssessmentPage() {
   const [currentPart, setCurrentPart] = useState(0);
   const [currentAnswer, setCurrentAnswer] = useState("");
   const [isCheckingWithAI, setIsCheckingWithAI] = useState(false);
+  const [isGettingSimilar, setIsGettingSimilar] = useState(false);
   const [currentQuestionChat, setCurrentQuestionChat] = useState("");
   const [assessmentName, setAssessmentName] = useState("Assessment"); // TODO: Fetch assessment name
   const [isVideosVisible, setIsVideosVisible] = useState(false);
@@ -335,6 +337,32 @@ export default function AssessmentPage() {
     });
   }
 
+  // swaps the current question (every part of it) for a new one like it
+  const getSimilar = () => {
+    if (currentParts.length === 0 || isGettingSimilar) return;
+    setIsGettingSimilar(true);
+    getSimilarQuestion({
+      questionIds: currentParts.map((part) => part.id),
+      courseId: params.course_id as string,
+    }).then(({ data, error }) => {
+      setIsGettingSimilar(false);
+      if (!data) return console.error(error);
+      setQuestions((latest) =>
+        latest?.map(
+          (questionItem) =>
+            data.find((newQuestion) => newQuestion.id === questionItem.id) ||
+            questionItem
+        )
+      );
+      // it is a new question: start it from its first part, with nothing answered and a fresh chat
+      setCurrentPart(0);
+      setCurrentAnswer("");
+      setUsingBoard(data[0]?.question_type === "DRAWING");
+      boardRef.current?.load([]);
+      setCurrentQuestionChat("");
+    });
+  };
+
   // streams an explanation of the current question into the chat
   const explainQuestion = () => {
     if (!currentQuestionData) return;
@@ -506,10 +534,14 @@ export default function AssessmentPage() {
                   <Tooltip content="Get a similar question">
                     <button
                       aria-label="Get a similar question"
-                      onClick={() => goToQuestion(currentQuestion + 1)}
+                      disabled={!currentQuestionData || isGettingSimilar || isCheckingWithAI}
+                      onClick={getSimilar}
                       className={iconButton}
                     >
-                      <FaRedo size={16} />
+                      <FaRedo
+                        size={16}
+                        className={isGettingSimilar ? "animate-spin" : ""}
+                      />
                     </button>
                   </Tooltip>
 
@@ -684,6 +716,19 @@ export default function AssessmentPage() {
                     <DrawingBoard
                       ref={boardRef}
                       onChange={setAnswer}
+                      fullscreenSideLabel="chat"
+                      fullscreenSide={
+                        <ChatWithAI
+                          fill
+                          currentQuestionChat={currentQuestionChat}
+                          setCurrentQuestionChat={setCurrentQuestionChat}
+                          courseId={params.course_id as string}
+                          questionContext={buildChatContext(
+                            currentParts,
+                            currentPart
+                          )}
+                        />
+                      }
                       fullscreenHeader={
                         <>
                           {isMultiPart && (
@@ -772,9 +817,9 @@ export default function AssessmentPage() {
                   <div className="flex items-center space-x-4">
                     <Button
                       onClick={handleCheckAnswer}
-                      disabled={isCheckingWithAI || !currentAnswer}
+                      disabled={isCheckingWithAI || isGettingSimilar || !currentAnswer}
                       className={
-                        isCheckingWithAI || !currentAnswer
+                        isCheckingWithAI || isGettingSimilar || !currentAnswer
                           ? " !bg-[#878787] !text-white"
                           : "!bg-[#333333] !text-white"
                       }

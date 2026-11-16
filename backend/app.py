@@ -464,6 +464,105 @@ def generate_assessment():
         "status": "Generation complete!",
     }})
 
+@server.route("/similarquestion", methods=["POST"])
+def similar_question():
+    """Swaps a question for a new one like it: the same idea and shape, different specifics.
+
+    Takes the ids of the question's rows (one, or every part of a multi-part question) and returns the rows as they are now."""
+    body = request.get_json() or {}
+    question_ids = [int(question_id) for question_id in body.get("question_ids") or []]
+    if not question_ids:
+        return jsonify({"error": "No question given"}), 400
+    rows = supabase.table("questions").select("*").in_("id", question_ids).order("id").execute().data
+    if len(rows) != len(question_ids):
+        return jsonify({"error": "Question not found"}), 404
+
+    is_multi_part = rows[0].get("group_number") is not None
+    has_figure = bool(rows[0].get("image_url"))
+
+    def describe(row):
+        question = {"question": row["question"], "question_type": row["question_type"]}
+        if row["question_type"] == "MCQ":
+            question["answers"] = row.get("answers")
+        return question
+
+    if is_multi_part:
+        original = {"context": rows[0].get("context") or "", "parts": [describe(row) for row in rows]}
+    else:
+        original = describe(rows[0])
+    if has_figure:
+        original["image_prompt"] = rows[0].get("image_description") or ""
+
+    class_context = course_context_text(get_course(body.get("course_id"))) if body.get("course_id") else ""
+    class_context_instruction = ""
+    if class_context:
+        class_context_instruction = f"""
+            The question is from a class. Below is what the student has provided about it. Write the new question the way this class's work is written, but NEVER put the class's expectations for answers in the question: no mention of the answer format, what a full answer must include, or how it is graded.
+            <class_context>
+            {class_context}
+            </class_context>
+            """
+
+    completion = chatgpt_client.chat.completions.create(
+        model="gpt-5.6-luna",
+        reasoning_effort="high",
+        response_format={"type": "json_object"},
+        messages=[
+            {
+                "role": "system",
+                "content": f"""A student is practicing with the question below and wants another one like it. Write one new question that practices the same concept and skill at the same difficulty, with different specifics: different numbers, functions, objects or scenario. Its answer must be different too, and it must not be a reworded copy.
+
+            Keep the shape of the original exactly:
+            - Return a JSON object with the same keys as the original.
+            - Keep every "question_type" as it is.
+            - A multi-part question keeps the same number of parts, in the same order, each practicing what the original part did. Dont put labels like "(a)" in the parts.
+            - An "MCQ" question has "answers" (array of strings) with the same number of choices, exactly one of them correct.
+            - If the original has "image_prompt", the new question needs its own figure: write a new "image_prompt" that fully describes it for an image generator that sees nothing else (every shape, axis, label, value and where it goes, labels as plain text), agreeing with the new question and never showing the answer. If the original has no "image_prompt", dont add one.
+            - Use MathJax like the original does: \\(...\\) for inline math and \\[...\\] for display math.
+            {class_context_instruction}
+            Return only the JSON object.
+            """
+            },
+            {"role": "user", "content": json.dumps(original)},
+        ],
+    )
+    try:
+        new_question = json.loads(completion.choices[0].message.content)
+        new_parts = new_question["parts"] if is_multi_part else [new_question]
+        if len(new_parts) != len(rows) or not all(isinstance(part.get("question"), str) and part["question"].strip() for part in new_parts):
+            raise ValueError("the new question does not have the shape of the original")
+        for row, part in zip(rows, new_parts):
+            if row["question_type"] == "MCQ" and not (isinstance(part.get("answers"), list) and len(part["answers"]) >= 2):
+                raise ValueError("a multiple choice question came back without choices")
+    except (json.JSONDecodeError, KeyError, TypeError, AttributeError, ValueError) as exception:
+        print(f"Could not use the similar question: {exception}")
+        return jsonify({"error": "Could not make a similar question, try again"}), 502
+
+    # the figure is redrawn for the new question; without one that worked, the question goes without
+    image_url, image_description = None, None
+    if has_figure and isinstance(new_question.get("image_prompt"), str) and new_question["image_prompt"].strip():
+        image_description = new_question["image_prompt"].strip()
+        image_url = generate_question_image(image_description)
+        if not image_url:
+            image_description = None
+
+    updated_rows = []
+    for row, part in zip(rows, new_parts):
+        changes = {
+            "question": part["question"],
+            "answers": part["answers"] if row["question_type"] == "MCQ" else row.get("answers"),
+            "image_url": image_url,
+            "image_description": image_description,
+            # it is a new question, so it starts unanswered
+            "is_answered": False,
+            "is_correct": None,
+            "given_answer": None,
+        }
+        if is_multi_part:
+            changes["context"] = new_question.get("context") or ""
+        updated_rows.extend(supabase.table("questions").update(changes).eq("id", row["id"]).execute().data)
+    return jsonify({"questions": updated_rows})
+
 MAX_FLASHCARDS = 100
 
 @server.route("/generateflashcards", methods=["POST"])
@@ -861,6 +960,7 @@ def explain_problem():
                     For math expressions, use the following format:
                     - For inline math: $1.45 \\times 10^{-2}$
                     - For display math: $$1.45 \\times 10^{-2}$$
+                    - The chat is narrow. Keep each line of math short: split a long equation or a chain of equalities into several display equations, one step per line, instead of one long line.
 
                     If the problem is one part of a multi-part question, explain only the part to answer now.
                     Use the shared context and build on the earlier parts and the student's answers to them
@@ -952,6 +1052,7 @@ def ask_ai():
             For math expressions, use the following format:
             - For inline math: $1.45 \\times 10^{-2}$
             - For display math: $$1.45 \\times 10^{-2}$$
+            - The chat is narrow. Keep each line of math short: split a long equation or a chain of equalities into several display equations, one step per line, instead of one long line.
             """
         }
         question_context = request.args.get("context")

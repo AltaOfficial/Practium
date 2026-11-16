@@ -41,3 +41,20 @@ body {
 .mjx-container mjx-container {
   display: inline !important;
 }
+
+/* Chat messages grow downwards, never sideways: a long equation wraps onto
+   more lines (at its =, +, - and so on) instead of making the message scroll. */
+.chat-message .katex-display {
+  max-width: 100%;
+  /* only for something that cannot be broken at all, like one very wide fraction or matrix */
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.chat-message .katex-display > .katex {
+  white-space: normal;
+}
+
+.chat-message .katex-display > .katex > .katex-html > .base {
+  margin: 0.2em 0;
+}
