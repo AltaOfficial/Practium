@@ -5,6 +5,14 @@ import rehypeKatex from "rehype-katex";
 import remarkMath from "remark-math";
 import remarkGfm from "remark-gfm";
 import "katex/dist/katex.min.css";
+import { useAuth } from "@clerk/nextjs";
+import { FaMicrophone, FaStop } from "react-icons/fa";
+import { CgSpinner } from "react-icons/cg";
+
+const BACKEND_URL =
+  process.env.NODE_ENV == "production"
+    ? process.env.NEXT_PUBLIC_BACKEND_URL
+    : "http://localhost:8000";
 
 // The chat is stored as one string; user messages are wrapped in these
 // markers and everything outside them is assistant output.
@@ -102,6 +110,81 @@ export default function ChatWithAI({
 
   const chatMessages = parseChat(currentQuestionChat);
 
+  // Speech to text: record from the microphone, then put the transcription in
+  // the message box so it can be edited before sending.
+  const { getToken } = useAuth();
+  const [micState, setMicState] = useState<"idle" | "recording" | "transcribing">("idle");
+  const [micError, setMicError] = useState("");
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  // set when the chat goes away mid-recording, so the recording is dropped
+  const discardRecordingRef = useRef(false);
+
+  useEffect(() => {
+    // reset on mount: in development React runs this cleanup once right after mounting
+    discardRecordingRef.current = false;
+    return () => {
+      discardRecordingRef.current = true;
+      if (recorderRef.current?.state === "recording") recorderRef.current.stop();
+    };
+  }, []);
+
+  const transcribe = async (audio: Blob) => {
+    setMicState("transcribing");
+    try {
+      const extension = audio.type.includes("mp4") ? "mp4" : audio.type.includes("ogg") ? "ogg" : "webm";
+      const formData = new FormData();
+      formData.append("audio", audio, `speech.${extension}`);
+      const response = await fetch(`${BACKEND_URL}/transcribe`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${await getToken()}` },
+        body: formData,
+      });
+      if (!response.ok) throw new Error(`Transcription failed: ${response.status}`);
+      const { text } = await response.json();
+      if (text) {
+        setMessageInput((prev) => (prev.trim() ? prev.trimEnd() + " " : "") + text);
+      }
+    } catch (e) {
+      console.error(e);
+      setMicError("Couldn't hear that. Try again.");
+    } finally {
+      setMicState("idle");
+    }
+  };
+
+  const startRecording = async () => {
+    setMicError("");
+    let stream: MediaStream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (e) {
+      console.error(e);
+      setMicError("Microphone access is blocked.");
+      return;
+    }
+    const recorder = new MediaRecorder(stream);
+    const chunks: Blob[] = [];
+    recorder.ondataavailable = (e) => {
+      if (e.data.size > 0) chunks.push(e.data);
+    };
+    recorder.onstop = () => {
+      stream.getTracks().forEach((track) => track.stop());
+      recorderRef.current = null;
+      if (discardRecordingRef.current) return;
+      const audio = new Blob(chunks, { type: recorder.mimeType });
+      if (audio.size > 0) transcribe(audio);
+      else setMicState("idle");
+    };
+    recorderRef.current = recorder;
+    recorder.start();
+    setMicState("recording");
+  };
+
+  const toggleRecording = () => {
+    if (micState === "recording") recorderRef.current?.stop();
+    else if (micState === "idle") startRecording();
+  };
+
   const sendMessage = () => {
     const text = messageInput.trim();
     if (!text) return;
@@ -113,7 +196,7 @@ export default function ChatWithAI({
     const messages = [...chatMessages, { role: "user", content: text }];
 
     const eventStream = new EventSource(
-      `${process.env.NODE_ENV == "production" ? process.env.NEXT_PUBLIC_BACKEND_URL : "http://localhost:8000"}/ask?messages=${encodeURIComponent(
+      `${BACKEND_URL}/ask?messages=${encodeURIComponent(
         JSON.stringify(messages)
       )}&context=${encodeURIComponent(questionContext || "")}${
         courseId ? `&course_id=${encodeURIComponent(courseId)}` : ""
@@ -209,8 +292,16 @@ export default function ChatWithAI({
             )}
           </div>
         </div>
+        {micError && <p className="w-full mt-2 text-sm font-medium text-[#333333]">{micError}</p>}
         <div className="flex w-full place-self-end mt-4">
           <TextField.Root
+            placeholder={
+              micState === "recording"
+                ? "Listening…"
+                : micState === "transcribing"
+                  ? "Transcribing…"
+                  : undefined
+            }
             onKeyDownCapture={(e) => {
               if (e.key === "Enter") {
                 sendMessage();
@@ -222,6 +313,26 @@ export default function ChatWithAI({
             className="w-full self-center flex border !text-[#333333] !outline-none !bg-transparent !font-medium border-[#333333] !rounded-[4px] !shadow-[1.5px_3px_0_0px_rgba(51,51,51,1)]"
           >
             <TextField.Slot className="!bg-transparent !text-[#333333] !font-medium" side="right">
+              <button
+                type="button"
+                onClick={toggleRecording}
+                disabled={micState === "transcribing"}
+                aria-label={micState === "recording" ? "Stop recording" : "Speak your message"}
+                title={micState === "recording" ? "Stop" : "Speak"}
+                className={`w-8 h-8 shrink-0 flex items-center justify-center outline-none !border-2 !border-[#333333] rounded-[4px] ${
+                  micState === "recording"
+                    ? "!bg-[#333333] !text-white"
+                    : "!bg-transparent !text-[#333333]"
+                }`}
+              >
+                {micState === "recording" ? (
+                  <FaStop size={12} className="animate-pulse" />
+                ) : micState === "transcribing" ? (
+                  <CgSpinner size={16} className="animate-spin" />
+                ) : (
+                  <FaMicrophone size={14} />
+                )}
+              </button>
               <Button className="!bg-[#333333] !text-white" onClick={sendMessage}>Send</Button>
             </TextField.Slot>
           </TextField.Root>

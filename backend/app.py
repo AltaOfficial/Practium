@@ -1137,6 +1137,34 @@ def ask_ai():
     
     return Response(response_stream(), mimetype="text/event-stream")
 
+@server.route("/transcribe", methods=["POST"])
+def transcribe_audio():
+    # speech to text for the chat: takes a recording, returns what was said
+    request_state = clerk_client.authenticate_request(request, AuthenticateRequestOptions(authorized_parties=["http://frontend:3000", "http://localhost:3000", os.environ.get("FRONTEND_URL")]))
+    if request_state.is_signed_in != True:
+        return jsonify({"error": "Not signed in"}), 401
+
+    audio = request.files.get("audio")
+    if not audio:
+        return jsonify({"error": "No audio provided"}), 400
+
+    audio_bytes = audio.read()
+    if len(audio_bytes) > 25 * 1024 * 1024: # the transcription API's limit
+        return jsonify({"error": "Recording is too long"}), 413
+
+    try:
+        transcription = chatgpt_client.audio.transcriptions.create(
+            model="gpt-transcribe",
+            # the file name's extension tells the API the audio format
+            file=(audio.filename or "speech.webm", audio_bytes, audio.mimetype),
+            prompt="A student talking to their tutor about a practice question. May include math and science terms.",
+        )
+    except Exception as e:
+        print(e)
+        return jsonify({"error": "Could not transcribe the recording"}), 500
+
+    return jsonify({"text": transcription.text.strip()})
+
 @server.route("/get_youtube_video_suggestions", methods=["POST"])
 def get_youtube_video_suggestions():
     # youtube blocks client side requests, so we need to make it server side
