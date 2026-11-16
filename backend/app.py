@@ -217,19 +217,17 @@ def add_course_memory(course_id, memory):
 # lets the tutor chat save something the student says about their class
 REMEMBER_FOR_CLASS_TOOL = {
     "type": "function",
-    "function": {
-        "name": "remember_for_class",
-        "description": "Save a lasting fact about the student's class to the class memory, so it is used for every future question, test and grading in this class.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "memory": {
-                    "type": "string",
-                    "description": "One short note that makes sense on its own, for example: \"The professor wants every limit answer to name the dominant term and justify each step in words.\"",
-                },
+    "name": "remember_for_class",
+    "description": "Save a lasting fact about the student's class to the class memory, so it is used for every future question, test and grading in this class.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "memory": {
+                "type": "string",
+                "description": "One short note that makes sense on its own, for example: \"The professor wants every limit answer to name the dominant term and justify each step in words.\"",
             },
-            "required": ["memory"],
         },
+        "required": ["memory"],
     },
 }
 
@@ -986,56 +984,53 @@ def ask_ai():
         return jsonify({"error": f"Invalid messages format: {str(e)}"}), 400
 
     def response_stream():
-        # the model may save to the class memory first and then reply, which takes another round
-        for _ in range(3):
-            stream = chatgpt_client.chat.completions.create(
-                model="gpt-5.6-luna",
-                messages=messages,
-                stream=True,
-                **({"tools": [REMEMBER_FOR_CLASS_TOOL]} if course else {})
-            )
+        # The Responses API is used here because chat completions cant combine tools with reasoning.
+        # The model may save to the class memory first and then reply, which takes another round.
+        conversation = [{"role": message["role"], "content": message["content"]} for message in messages[1:]]
+        next_request = {"input": conversation}
+        try:
+            for _ in range(3):
+                stream = chatgpt_client.responses.create(
+                    model="gpt-5.6-luna",
+                    instructions=system_message["content"],
+                    stream=True,
+                    **({"tools": [REMEMBER_FOR_CLASS_TOOL]} if course else {}),
+                    **next_request
+                )
 
-            reply = ""
-            tool_calls = {} # the calls arrive in pieces, keyed by their index
-            for chunk in stream:
-                if not chunk.choices:
-                    continue
-                delta = chunk.choices[0].delta
-                if delta.content is not None:
-                    reply += delta.content
-                    # JSON-encode so newlines in the chunk don't break SSE framing
-                    yield f"data: {json.dumps(delta.content)}\n\n"
-                for piece in delta.tool_calls or []:
-                    tool_call = tool_calls.setdefault(piece.index, {"id": "", "name": "", "arguments": ""})
-                    if piece.id:
-                        tool_call["id"] = piece.id
-                    if piece.function and piece.function.name:
-                        tool_call["name"] = piece.function.name
-                    if piece.function and piece.function.arguments:
-                        tool_call["arguments"] += piece.function.arguments
+                replied = False
+                tool_calls = []
+                response_id = None
+                for event in stream:
+                    if event.type == "response.output_text.delta":
+                        replied = True
+                        # JSON-encode so newlines in the chunk don't break SSE framing
+                        yield f"data: {json.dumps(event.delta)}\n\n"
+                    elif event.type == "response.output_item.done" and event.item.type == "function_call":
+                        tool_calls.append(event.item)
+                    elif event.type == "response.completed":
+                        response_id = event.response.id
 
-            if not tool_calls:
-                break
+                if not tool_calls or not response_id:
+                    break
 
-            messages.append({
-                "role": "assistant",
-                "content": reply or None,
-                "tool_calls": [
-                    {"id": tool_call["id"], "type": "function", "function": {"name": tool_call["name"], "arguments": tool_call["arguments"]}}
-                    for tool_call in tool_calls.values()
-                ],
-            })
-            for tool_call in tool_calls.values():
-                result = "Could not save this."
-                if tool_call["name"] == "remember_for_class":
-                    try:
-                        result = add_course_memory(course["id"], json.loads(tool_call["arguments"]).get("memory"))
-                    except Exception as exception:
-                        print(f"Could not save class memory: {exception}")
-                messages.append({"role": "tool", "tool_call_id": tool_call["id"], "content": result})
-            if reply:
-                # keep what comes next apart from what was already said
-                yield f"data: {json.dumps(chr(10) + chr(10))}\n\n"
+                tool_results = []
+                for tool_call in tool_calls:
+                    result = "Could not save this."
+                    if tool_call.name == "remember_for_class":
+                        try:
+                            result = add_course_memory(course["id"], json.loads(tool_call.arguments).get("memory"))
+                        except Exception as exception:
+                            print(f"Could not save class memory: {exception}")
+                    tool_results.append({"type": "function_call_output", "call_id": tool_call.call_id, "output": result})
+                # carry on from where the model stopped, with the results of its calls
+                next_request = {"previous_response_id": response_id, "input": tool_results}
+                if replied:
+                    # keep what comes next apart from what was already said
+                    yield f"data: {json.dumps(chr(10) + chr(10))}\n\n"
+        except Exception as exception:
+            print(f"Chat failed: {exception}")
+            yield f"data: {json.dumps('Sorry, something went wrong. Try sending that again.')}\n\n"
 
         yield "data: [DONE]\n\n"
     
