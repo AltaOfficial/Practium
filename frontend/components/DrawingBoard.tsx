@@ -43,6 +43,9 @@ const STROKE_WIDTH = 4;
 // how close the eraser has to come to a stroke to take it off
 const ERASER_RADIUS = 10;
 const MAX_UNDO_STEPS = 100;
+// how long after a pen stroke the page is told about it, so that its
+// re-render doesn't land while the next stroke is starting
+const STROKE_NOTIFY_DELAY = 500;
 const EXPORT_PADDING = 40;
 const MAX_EXPORT_SIDE = 2000;
 
@@ -239,9 +242,31 @@ const DrawingBoard = forwardRef<DrawingBoardRef, DrawingBoardProps>(
     const hoverClickHeld = useRef(false);
     const erasing = tool === "eraser" || penErasing;
 
+    const notifyTimer = useRef<number | null>(null);
+    const onChangeRef = useRef(onChange);
+    onChangeRef.current = onChange;
+
+    const cancelPendingNotify = () => {
+      if (notifyTimer.current === null) return false;
+      window.clearTimeout(notifyTimer.current);
+      notifyTimer.current = null;
+      return true;
+    };
+
     const notify = () => {
+      cancelPendingNotify();
       const paths = pathsRef.current;
-      onChange(paths.length > 0 ? JSON.stringify(paths) : "");
+      onChangeRef.current(paths.length > 0 ? JSON.stringify(paths) : "");
+    };
+
+    // Tells the page once the writing pauses. Telling it re-renders the whole
+    // page, which on a phone is slow enough to swallow the start of a stroke.
+    const notifyLater = () => {
+      cancelPendingNotify();
+      notifyTimer.current = window.setTimeout(() => {
+        notifyTimer.current = null;
+        notify();
+      }, STROKE_NOTIFY_DELAY);
     };
 
     // puts these paths on the board in place of what is there
@@ -348,6 +373,7 @@ const DrawingBoard = forwardRef<DrawingBoardRef, DrawingBoardProps>(
         undoStack.current = [];
         redoStack.current = [];
         eraseGesture.current = null;
+        cancelPendingNotify();
         showPaths(paths);
         viewportRef.current?.scrollTo({ left: 0, top: 0 });
       },
@@ -424,6 +450,14 @@ const DrawingBoard = forwardRef<DrawingBoardRef, DrawingBoardProps>(
       const onDown = (event: PointerEvent) => {
         // ignore the events this component dispatches itself
         if (redispatching.current) return;
+        // a press anywhere off the board (say, on "Check") needs the page to
+        // have the latest drawing
+        if (
+          notifyTimer.current !== null &&
+          !viewportRef.current?.contains(event.target as Node)
+        ) {
+          notify();
+        }
         if (event.pointerType === "pen") {
           penDown.current = true;
         } else {
@@ -446,6 +480,7 @@ const DrawingBoard = forwardRef<DrawingBoardRef, DrawingBoardProps>(
         document.removeEventListener("pointerdown", onDown, true);
         document.removeEventListener("pointerup", onLift);
         document.removeEventListener("pointercancel", onLift);
+        cancelPendingNotify();
       };
     }, []);
 
@@ -712,14 +747,19 @@ const DrawingBoard = forwardRef<DrawingBoardRef, DrawingBoardProps>(
               onChange={(paths) => {
                 pathsRef.current = paths;
               }}
-              onStroke={() => {
-                // a finished pen stroke can be undone
+              onStroke={(stroke) => {
                 if (strokeAlreadyInHistory.current) {
                   strokeAlreadyInHistory.current = false;
-                } else {
-                  addToHistory(pathsRef.current.slice(0, -1));
+                  notifyLater();
+                  return;
                 }
-                notify();
+                // The canvas also calls this when a stroke starts, before it
+                // has reported the new stroke; only a finished one counts.
+                const paths = pathsRef.current;
+                if (paths[paths.length - 1] !== stroke) return;
+                // a finished pen stroke can be undone
+                addToHistory(paths.slice(0, -1));
+                notifyLater();
               }}
             />
           </div>
